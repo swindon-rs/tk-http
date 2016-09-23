@@ -1,0 +1,13 @@
+[package]
+name = "minihttp"
+version = "0.1.0"
+authors = ["Alexey Popravka <alexey.popravka@horsedevel.com>"]
+
+[dependencies]
+
+bytes = { git = "https://github.com/carllerche/bytes" }
+futures = "0.1.1"
+httparse = { git = "https://github.com/seanmonstar/httparse" } # "1.1.2"
+tokio-core = "0.1.0"
+tokio-proto = { git = "https://github.com/tokio-rs/tokio-proto" }
+tokio-service = { git = "https://github.com/tokio-rs/tokio-service" }
