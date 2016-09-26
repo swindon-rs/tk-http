@@ -6,21 +6,22 @@ use bytes::MutBuf;
 use tokio_proto::Serialize;
 use tokio_proto::pipeline::Frame;
 
-use super::request::Version;
-
 #[derive(Debug)]
 pub struct Response {
-    version: Version,
+    version: u8,
 }
 
 pub struct Serializer;
 
 impl Response {
 
-    pub fn new(v: Version) -> Response {
-        Response {
-            version: v,
-        }
+    pub fn new() -> Response {
+        Response::default()
+    }
+}
+impl Default for Response {
+    fn default() -> Response {
+        Response {version: 0}
     }
 }
 

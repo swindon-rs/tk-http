@@ -6,11 +6,9 @@ use httparse;
 use tokio_proto::Parse;
 use tokio_proto::pipeline::Frame;
 
-use super::response::Response;
-
 /// Enum representing HTTP request methods.
 ///
-/// ```rust
+/// ```rust,ignore
 /// match req.method {
 ///     Method::GET => {},   // handle GET
 ///     Method::POST => {},  // handle POST requests
@@ -62,12 +60,6 @@ impl fmt::Display for Version {
     }
 }
 
-impl Request {
-
-    pub fn new_response(&self) -> Response {
-        Response::new(self.version.clone())
-    }
-}
 
 impl Parse for Parser {
     type Out = Frame<Request, (), io::Error>;

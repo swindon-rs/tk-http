@@ -25,7 +25,7 @@ impl Service for HelloWorld {
 
     fn call(&self, req: minihttp::Request) -> Self::Future {
         info!("{:?} {:?}", req.method, req.path);
-        let resp = req.new_response();
+        let resp = minihttp::Response::new();
         //resp.header("Content-Type", "text/html");
         //resp.body("<h1>Hello world</h4>\n");
         let resp = resp;

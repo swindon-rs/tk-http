@@ -4,27 +4,37 @@
 //!
 //! Simple Hello world example.
 //!
-//! ```rust
+//! ```rust,no_run
+//! extern crate futures;
+//! extern crate minihttp;
+//! extern crate tokio_core;
+//! extern crate tokio_service;
+//! use std::io;
+//! use tokio_service::{Service, NewService};
+//! use tokio_core::reactor::Core;
+//! use futures::{Finished, Async};
+//!
+//! #[derive(Clone)]
 //! struct HelloWorld;
 //!
 //! impl Service for HelloWorld {
 //!     type Request = minihttp::Request;
 //!     type Response = minihttp::Response;
 //!     type Error = io::Error;
-//!     type Futute = futures::Future;
+//!     type Future = Finished<minihttp::Response, io::Error>;
 //!
 //!     fn call(&self, req: minihttp::Request) -> Self::Future {
 //!         let resp = minihttp::Response::new();
-//!         resp.header("Content-Type", "text/plain");
-//!         resp.body("Hello, World");
+//!         // resp.header("Content-Type", "text/plain");
+//!         // resp.body("Hello, World");
 //!         futures::finished(resp)
 //!
 //!     }
-//!     fn poll(&self) -> Async<()> { Async::Ready(()) }
+//!     fn poll_ready(&self) -> Async<()> { Async::Ready(()) }
 //! }
 //!
 //! fn main() {
-//!     let lp = Core::new().unwrap();
+//!     let mut lp = Core::new().unwrap();
 //!
 //!     let addr = "0.0.0.0:8080".parse().unwrap();
 //!
@@ -88,16 +98,16 @@ impl<T> Service for HttpService<T>
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// let service = SomeHTTPService::new();
 ///
-/// let lp = Core::new().unwrap();
+/// let mut lp = Core::new().unwrap();
 ///
 /// let addr = "0.0.0.0:8080".parse().unwrap();
 ///
 /// serve(&lp.handle(), addr, service).unwrap();
 ///
-/// lp.run(futures::empty<(), ()>()).unwrap();
+/// lp.run(futures::empty<(), ()>() ).unwrap();
 /// ```
 pub fn serve<T>(handle: &Handle, addr: SocketAddr, service: T) -> io::Result<ServerHandle>
     where T: NewService<Request=Request, Response=Response, Error=io::Error> + Send + 'static
