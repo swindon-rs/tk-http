@@ -46,7 +46,7 @@ pub mod response;
 use std::io;
 use std::net::SocketAddr;
 
-use bytes::BlockBuf;
+use bytes::buf::BlockBuf;
 use futures::{Future, Map, Async};
 use futures::stream::Receiver;
 use tokio_core::reactor::Handle;

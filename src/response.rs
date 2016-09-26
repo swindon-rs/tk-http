@@ -1,7 +1,8 @@
 use std::io;
 use std::fmt::Write;
 
-use bytes::{BlockBuf, MutBuf, Fmt};
+use bytes::buf::{BlockBuf, Fmt};
+use bytes::MutBuf;
 use tokio_proto::Serialize;
 use tokio_proto::pipeline::Frame;
 

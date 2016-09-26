@@ -1,7 +1,7 @@
 use std::io;
 use std::fmt;
 
-use bytes::BlockBuf;
+use bytes::buf::BlockBuf;
 use httparse;
 use tokio_proto::Parse;
 use tokio_proto::pipeline::Frame;
