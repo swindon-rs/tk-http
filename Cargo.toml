@@ -11,6 +11,7 @@ httparse = { git = "https://github.com/seanmonstar/httparse" } # "1.1.2"
 tokio-core = "0.1.0"
 tokio-proto = { git = "https://github.com/tokio-rs/tokio-proto" }
 tokio-service = { git = "https://github.com/tokio-rs/tokio-service" }
+netbuf = { git = "https://github.com/tailhook/netbuf" }
 
 [dev-dependencies]
 log = "0.3.6"

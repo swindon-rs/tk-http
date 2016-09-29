@@ -49,9 +49,11 @@ extern crate httparse;
 extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_service;
+extern crate netbuf;
 
 pub mod request;
 pub mod response;
+pub mod server;
 
 use std::io;
 use std::net::SocketAddr;
@@ -73,7 +75,15 @@ pub use response::Response;
 ///
 /// A wrapper around `tokio_service::Service`
 pub struct HttpService<T> {
-    pub inner: T,
+    handler: T,
+}
+
+impl<T> HttpService<T> {
+    pub fn new(handler: T) -> HttpService<T> {
+        HttpService {
+            handler: handler,
+        }
+    }
 }
 
 impl<T> Service for HttpService<T>
@@ -85,13 +95,24 @@ impl<T> Service for HttpService<T>
     type Future = Map<T::Future, fn(Response) -> Self::Response>;
 
     fn call(&self, req: Request) -> Self::Future {
-        self.inner.call(req).map(Message::WithoutBody)
+        self.handler.call(req).map(Message::WithoutBody)
+
+        // Inside HttpService we receive parsed requests
+        //  and must wrap Responses into Message variant
+        //
+        // Also we must control response headers:
+        //  * HTTP version in status line
+        //  * Connection header -- close or keep-alive
+        //  * Server name;
+        //  * Date;
+        // First two headers depends on Request received
     }
 
     fn poll_ready(&self) -> Async<()> {
         Async::Ready(())
     }
 }
+
 
 
 /// Bind to address and start serving the service
@@ -112,9 +133,9 @@ impl<T> Service for HttpService<T>
 pub fn serve<T>(handle: &Handle, addr: SocketAddr, service: T) -> io::Result<ServerHandle>
     where T: NewService<Request=Request, Response=Response, Error=io::Error> + Send + 'static
     {
-    server::listen(handle, addr, move |socket| {
+    tokio_proto::server::listen(handle, addr, move |socket| {
         let service = try!(service.new_service());
-        let service = HttpService { inner: service };
+        let server = HttpService::new(service);
         // Create the transport
         let transport =
             Framed::new(socket,
@@ -122,6 +143,27 @@ pub fn serve<T>(handle: &Handle, addr: SocketAddr, service: T) -> io::Result<Ser
                         response::Serializer,
                         BlockBuf::default(),
                         BlockBuf::default());
-        pipeline::Server::new(service, transport)
+        pipeline::Server::new(server, transport)
     })
+}
+
+
+pub fn core_serve(handle: &Handle, addr: SocketAddr) {
+    let listener = TcpListener::bind(&addr, handle).unwrap();
+    let handle2 = handle.clone();
+    handle.spawn(listener.incoming().for_each(move |(stream, addr)| {
+        println!("Got incomming connection: {:?}, {:?}", stream, addr);
+        handle2.spawn(
+            server::HttpServer::new(stream)
+            .map(|i| {println!("done"); })
+            .map_err(|err| { println!("Got Error: {:?}", err); }));
+        // * Spawn handler for connection;
+        // * Count handled connections;
+        //let (reader, writer) = stream.split();
+        // Start handler task with two ends
+        // handle2.spawn();
+        Ok(())
+    }).map_err(|e| {
+        println!("Server error: {:?}", e)
+    }));
 }
