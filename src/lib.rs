@@ -60,9 +60,10 @@ use std::net::SocketAddr;
 
 use bytes::buf::BlockBuf;
 use futures::{Future, Map, Async};
-use futures::stream::Receiver;
+use futures::stream::{Stream, Receiver};
 use tokio_core::reactor::Handle;
-use tokio_proto::{server,pipeline};
+use tokio_core::net::TcpListener;
+use tokio_proto::{pipeline};
 use tokio_proto::{Framed, Message};
 use tokio_proto::server::ServerHandle;
 use tokio_service::{Service, NewService};
