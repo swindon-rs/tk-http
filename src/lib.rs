@@ -4,7 +4,7 @@
 //!
 //! Simple Hello world example.
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! extern crate futures;
 //! extern crate minihttp;
 //! extern crate tokio_core;
@@ -49,71 +49,26 @@ extern crate httparse;
 extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_service;
+// extern crate url;
 extern crate netbuf;
+
 
 pub mod request;
 pub mod response;
 pub mod server;
+pub mod headers;
+mod error;
 
-use std::io;
 use std::net::SocketAddr;
 
-use bytes::buf::BlockBuf;
-use futures::{Future, Map, Async};
-use futures::stream::{Stream, Receiver};
+use futures::Future;
+use futures::stream::{Stream};
 use tokio_core::reactor::Handle;
 use tokio_core::net::TcpListener;
-use tokio_proto::{pipeline};
-use tokio_proto::{Framed, Message};
-use tokio_proto::server::ServerHandle;
-use tokio_service::{Service, NewService};
 
 pub use request::Request;
 pub use response::Response;
-
-
-/// HTTP Service.
-///
-/// A wrapper around `tokio_service::Service`
-pub struct HttpService<T> {
-    handler: T,
-}
-
-impl<T> HttpService<T> {
-    pub fn new(handler: T) -> HttpService<T> {
-        HttpService {
-            handler: handler,
-        }
-    }
-}
-
-impl<T> Service for HttpService<T>
-    where T: Service<Request=Request, Response=Response, Error=io::Error>
-{
-    type Request = Request;
-    type Response = Message<Response, Receiver<(), io::Error>>;
-    type Error = io::Error;
-    type Future = Map<T::Future, fn(Response) -> Self::Response>;
-
-    fn call(&self, req: Request) -> Self::Future {
-        self.handler.call(req).map(Message::WithoutBody)
-
-        // Inside HttpService we receive parsed requests
-        //  and must wrap Responses into Message variant
-        //
-        // Also we must control response headers:
-        //  * HTTP version in status line
-        //  * Connection header -- close or keep-alive
-        //  * Server name;
-        //  * Date;
-        // First two headers depends on Request received
-    }
-
-    fn poll_ready(&self) -> Async<()> {
-        Async::Ready(())
-    }
-}
-
+pub use error::Error;
 
 
 /// Bind to address and start serving the service
@@ -127,36 +82,23 @@ impl<T> Service for HttpService<T>
 ///
 /// let addr = "0.0.0.0:8080".parse().unwrap();
 ///
-/// serve(&lp.handle(), addr, service).unwrap();
+/// serve(&lp.handle(), addr, service);
 ///
 /// lp.run(futures::empty<(), ()>() ).unwrap();
 /// ```
-pub fn serve<T>(handle: &Handle, addr: SocketAddr, service: T) -> io::Result<ServerHandle>
-    where T: NewService<Request=Request, Response=Response, Error=io::Error> + Send + 'static
-    {
-    tokio_proto::server::listen(handle, addr, move |socket| {
-        let service = try!(service.new_service());
-        let server = HttpService::new(service);
-        // Create the transport
-        let transport =
-            Framed::new(socket,
-                        request::Parser,
-                        response::Serializer,
-                        BlockBuf::default(),
-                        BlockBuf::default());
-        pipeline::Server::new(server, transport)
-    })
-}
-
-
-pub fn core_serve(handle: &Handle, addr: SocketAddr) {
+pub fn serve<S, H>(handle: &Handle, addr: SocketAddr, service: H)
+    where H: server::NewHandler<Handler=S> + 'static,
+          S: server::HttpService<Request=Request, Response=Response, Error=server::HttpError> + 'static,
+{
     let listener = TcpListener::bind(&addr, handle).unwrap();
     let handle2 = handle.clone();
+
     handle.spawn(listener.incoming().for_each(move |(stream, addr)| {
         println!("Got incomming connection: {:?}, {:?}", stream, addr);
+        let handler = service.new_handler();
         handle2.spawn(
-            server::HttpServer::new(stream)
-            .map(|i| {println!("done"); })
+            server::HttpServer::new(stream, handler)
+            .map(|_| {println!("done"); })
             .map_err(|err| { println!("Got Error: {:?}", err); }));
         // * Spawn handler for connection;
         // * Count handled connections;
