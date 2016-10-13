@@ -19,7 +19,7 @@ pub trait HttpService {
     type Request;
     type Response;
     type Error;
-    type Future: Future<Item=Message<Self::Response>, Error=Self::Error>;
+    type Future: Future<Item=Self::Response, Error=Self::Error>;
 
     fn call(&self, req: Self::Request) -> Self::Future;
 
@@ -40,7 +40,7 @@ pub struct HttpServer<T, S>
 {
     socket: S,
     in_buf: Buf,
-    in_body: Option<Buf>,
+    request: Option<Request>,
     out_buf: Buf,
     out_body: Option<Buf>,
     service: T,
@@ -56,8 +56,8 @@ impl<T, S> HttpServer<T, S>
         HttpServer {
             socket: socket,
             in_buf: Buf::new(),
-            in_body: None,
             out_buf: Buf::new(),
+            request: None,
             out_body: None,
             service: service,
             in_flight: VecDeque::with_capacity(32),
@@ -97,31 +97,29 @@ impl<T, S> HttpServer<T, S>
             };
 
             // we're either parsing new request, or continue parsing body;
-            let bytes = if self.in_body.is_none() {
-                // no body; parse and dispatch new request;
-                // if request parsed (status line + all headers are read)
-                //  check to see if body follows and initialize in_body;
-                match try!(Request::parse_from(&self.in_buf)) {
-                    Async::Ready((req, bytes)) => {
+            if try!(self.parse_request()) {
+                let req = self.request.take().unwrap();
+                let waiter = self.service.call(req);
+                self.in_flight.push_back(InFlight::Active(waiter));
+                // Need to drop part of buffer (current request)
+                // and stash the rest for next one.
+            }
+            // self.in_buf.consume(bytes);
+        }
+    }
 
-                        if req.has_body() {
-                            self.in_body = Some(Buf::new());
-                        }
-
-                        let waiter = self.service.call(req);
-                        self.in_flight.push_back(InFlight::Active(waiter));
-
-                        bytes
-                    },
-                    Async::NotReady => {
-                        continue
-                    },
-                }
-            } else {
-                // skip or send body chunk to body receiver;
-                0
-            };
-            self.in_buf.consume(bytes);
+    fn parse_request(&mut self) -> Result<bool, io::Error> {
+        if self.request.is_none() {
+            match try!(Request::parse_from(&self.in_buf)) {
+                Async::NotReady => return Ok(false),
+                Async::Ready((req, size)) => {
+                    self.request = Some(req);
+                },
+            }
+        }
+        match try!(self.request.as_mut().unwrap().parse_body(&mut self.socket)) {
+            Async::Ready(_) => Ok(true),
+            Async::NotReady => Ok(false),
         }
     }
 
@@ -129,15 +127,8 @@ impl<T, S> HttpServer<T, S>
         // if future is done -> start writing response;
         // if response has body: schedule to send body;
         if let Some(res) = self.poll_waiters() {
-            match try!(res) {
-                Message::WithoutBody(resp) => {
-                    println!("Got message without body!");
-                    try!(resp.write_to(&mut self.out_buf));
-                },
-                _ => {
-                    println!("Got some message");
-                },
-            }
+            let resp = try!(res);
+            try!(resp.write_to(&mut self.out_buf));
         };
 
         loop {
@@ -155,7 +146,7 @@ impl<T, S> HttpServer<T, S>
         }
     }
 
-    fn poll_waiters(&mut self) -> Option<Result<Message<T::Response>, T::Error>> {
+    fn poll_waiters(&mut self) -> Option<Result<T::Response, T::Error>> {
         for waiter in self.in_flight.iter_mut() {
             waiter.poll();
         }
@@ -178,11 +169,6 @@ impl<T, S> Future for HttpServer<T, S>
     type Error = io::Error;
 
     fn poll(&mut self) -> HttpPoll {
-        // 4 steps:
-        //      flush
-        //      read+parse+dispatch
-        //      write+dispose
-        //      flush
         try!(self.flush());
 
         try!(self.read_and_process());
@@ -220,11 +206,4 @@ impl<F: Future> InFlight<F> {
         };
         *self = InFlight::Done(res);
     }
-}
-
-
-pub enum Message<R> {
-    WithoutBody(R),
-    WithBody(R, Buf),
-    Body(Buf),
 }

@@ -26,7 +26,9 @@ pub struct Request {
     pub path: String,
     pub version: u8,
 
-    headers: Vec<(Header, String)>,
+    pub headers: Vec<(Header, String)>,
+
+    pub body: Option<Body>,
 
     // some known headers
     host: Option<usize>,
@@ -36,21 +38,6 @@ pub struct Request {
 
 
 impl Request {
-
-    pub fn new(parsed: httparse::Request) -> Request {
-        let mut req = Request {
-            method: Method::from(parsed.method.unwrap()),
-            version: parsed.version.unwrap(),
-            path: parsed.path.unwrap().to_string(),
-
-            headers: Vec::with_capacity(MAX_HEADERS),
-
-            host: None,
-            content_type: None,
-        };
-        req.parse_headers(parsed);
-        req
-    }
 
     pub fn parse_from(buf: &Buf) -> Poll<(Request,usize), io::Error> {
         let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
@@ -67,8 +54,24 @@ impl Request {
                     io::ErrorKind::Other, e.to_string()));
             },
         };
-        let req = Request::new(parser);
+        let mut req = Request {
+            method: Method::from(parser.method.unwrap()),
+            version: parser.version.unwrap(),
+            path: parser.path.unwrap().to_string(),
+            headers: Vec::with_capacity(MAX_HEADERS),
+            body: None,
+
+            host: None,
+            content_type: None,
+        };
+        req.parse_headers(parser);
         Ok(Async::Ready((req, bytes)))
+    }
+
+    pub fn parse_body<R: io::Read>(&mut self, socket: &mut R)
+        -> Poll<(), io::Error>
+    {
+        Ok(Async::Ready(()))
     }
 
     fn parse_headers(&mut self, parser: httparse::Request) {
@@ -85,10 +88,6 @@ impl Request {
         }
     }
 
-    fn parse_body(&mut self) -> Poll<(), Error> {
-        Ok(Async::Ready(()))
-    }
-
     // Public interface
 
     pub fn new_response(&self) -> Response {
@@ -96,7 +95,7 @@ impl Request {
     }
 
     pub fn has_body(&self) -> bool {
-        false
+        self.body.is_some()
     }
 
     /// Value of Host header
@@ -121,5 +120,25 @@ impl Request {
     pub fn read_body(&mut self, buf: &mut [u8]) -> Poll<usize, Error> {
         // this must/should be hooked to underlying tcp stream
         Ok(Async::NotReady)
+    }
+}
+
+
+#[derive(Debug)]
+pub struct Body {
+    data: Buf,
+}
+
+impl Body {
+    pub fn new(buf: Buf) -> Body {
+        Body { data: buf }
+    }
+
+    pub fn parse_from<R: io::Read>(&mut self, socket: &mut R) {
+        self.data.read_from(socket);
+        self.parse();
+    }
+
+    fn parse(&mut self) {
     }
 }

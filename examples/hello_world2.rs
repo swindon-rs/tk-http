@@ -20,13 +20,13 @@ impl server::HttpService for HelloWorld {
     type Request = Request;
     type Response = Response;
     type Error = io::Error;
-    type Future = futures::Finished<server::Message<Self::Response>, Self::Error>;
+    type Future = futures::Finished<Self::Response, Self::Error>;
 
     fn call(&self, req: Self::Request) -> Self::Future {
         let mut resp = req.new_response();
         resp.set_status(204)
             .set_reason("No Content".to_string());
-        futures::finished(server::Message::WithoutBody(resp))
+        futures::finished(resp)
     }
 }
 impl server::NewHandler for HelloWorld {
