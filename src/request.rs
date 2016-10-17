@@ -1,12 +1,13 @@
 use std::io;
 use std::convert::From;
 use std::str;
+use std::str::FromStr;
 
 use httparse;
 use netbuf::Buf;
 use futures::{Async, Poll};
 
-use super::error::Error;
+// use super::error::Error;
 use super::response::Response;
 
 use super::headers::{Method, Header};
@@ -33,6 +34,7 @@ pub struct Request {
     // some known headers
     host: Option<usize>,
     content_type: Option<usize>,
+    content_length: Option<usize>,
     // add more known headers;
 }
 
@@ -63,16 +65,18 @@ impl Request {
 
             host: None,
             content_type: None,
+            content_length: None,
         };
         req.parse_headers(parser);
         Ok(Async::Ready((req, bytes)))
     }
 
-    pub fn parse_body<R: io::Read>(&mut self, socket: &mut R)
-        -> Poll<(), io::Error>
-    {
-        Ok(Async::Ready(()))
-    }
+    // pub fn parse_body(&mut self, buf: &mut Buf) -> Poll<(), io::Error> {
+    //     if let Some(body_size) = self.content_length() {
+    //         println!("Must read {} bytes", body_size);
+    //     }
+    //     Ok(Async::Ready(()))
+    // }
 
     fn parse_headers(&mut self, parser: httparse::Request) {
         for h in parser.headers.iter() {
@@ -81,6 +85,10 @@ impl Request {
             match header {
                 Header::Host => {
                     self.host = Some(self.headers.len());
+                },
+                Header::ContentLength => {
+                    // check if value is usize:
+                    self.content_length = Some(self.headers.len());
                 },
                 _ => {},
             }
@@ -101,7 +109,7 @@ impl Request {
     /// Value of Host header
     pub fn host(&self) -> Option<&str> {
         match self.host {
-            Some(s) => Some(self.headers[s].1.as_ref()),
+            Some(idx) => Some(self.headers[idx].1.as_ref()),
             None => None,
         }
     }
@@ -109,24 +117,29 @@ impl Request {
     /// Value of Content-Type header
     pub fn content_type(&self) -> Option<&str> {
         match self.content_type {
-            Some(s) => Some(self.headers[s].1.as_ref()),
+            Some(idx) => Some(self.headers[idx].1.as_ref()),
             None => None,
         }
     }
 
-    // interface to body
-
-    /// Read request body into buffer.
-    pub fn read_body(&mut self, buf: &mut [u8]) -> Poll<usize, Error> {
-        // this must/should be hooked to underlying tcp stream
-        Ok(Async::NotReady)
+    /// Value of Content-Length header
+    pub fn content_length(&self) -> Option<usize> {
+        match self.content_length {
+            None => None,
+            Some(idx) => {
+                match usize::from_str(self.headers[idx].1.as_ref()) {
+                    Ok(size) => Some(size),
+                    Err(_) => None,
+                }
+            },
+        }
     }
 }
 
 
 #[derive(Debug)]
 pub struct Body {
-    data: Buf,
+    pub data: Buf,
 }
 
 impl Body {
@@ -134,11 +147,15 @@ impl Body {
         Body { data: buf }
     }
 
-    pub fn parse_from<R: io::Read>(&mut self, socket: &mut R) {
-        self.data.read_from(socket);
-        self.parse();
-    }
-
-    fn parse(&mut self) {
+    pub fn parse_from(request: &Request, buf: &Buf)
+        -> Poll<usize, io::Error>
+    {
+        if let Some(clen) = request.content_length() {
+            if buf.len() >= clen {
+                return Ok(Async::Ready(clen))
+            }
+        // } else if Some(ctype) = request.content_type() {
+        }
+        Ok(Async::NotReady)
     }
 }

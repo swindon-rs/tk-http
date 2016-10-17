@@ -1,17 +1,11 @@
 use std::io;
-use std::fmt;
+// use std::fmt;
 use std::io::Write;
 
-use futures;
-use futures::{Poll, Async};
+// use futures;
+// use futures::{Poll, Async};
 use netbuf::Buf;
 
-
-#[derive(Debug, PartialEq)]
-enum ResponseState {
-    CollectHeaders,
-    WriteBody,
-}
 
 #[derive(Debug)]
 pub struct Response {

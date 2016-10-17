@@ -67,6 +67,7 @@ pub enum Header {
     Connection,
     KeepAlive,
     // add some more
+    ContentLength,
     Raw(String),
 }
 
@@ -80,6 +81,8 @@ impl<'a> From<&'a str> for Header {
             Header::Connection
         } else if val.eq_ignore_ascii_case("Keep-Alive") {
             Header::KeepAlive
+        } else if val.eq_ignore_ascii_case("Content-Length") {
+            Header::ContentLength
         } else {
             Header::Raw(val.to_string())
         }

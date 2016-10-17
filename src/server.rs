@@ -1,14 +1,14 @@
 use std::io;
-use std::io::Write;
+// use std::io::Write;
 use std::collections::VecDeque;
 
 use futures::{Future, Poll, Async};
 use tokio_core::io::{Io};
 use netbuf::Buf;
 
-use request::Request;
+use request::{Request, Body};
 use response::Response;
-use error::Error;
+// use error::Error;
 
 
 pub type HttpError = io::Error;
@@ -42,7 +42,7 @@ pub struct HttpServer<T, S>
     in_buf: Buf,
     request: Option<Request>,
     out_buf: Buf,
-    out_body: Option<Buf>,
+    // out_body: Option<Buf>,
     service: T,
     in_flight: VecDeque<InFlight<T::Future>>,
 }
@@ -58,7 +58,7 @@ impl<T, S> HttpServer<T, S>
             in_buf: Buf::new(),
             out_buf: Buf::new(),
             request: None,
-            out_body: None,
+            // out_body: None,
             service: service,
             in_flight: VecDeque::with_capacity(32),
         }
@@ -82,29 +82,35 @@ impl<T, S> HttpServer<T, S>
 
     fn read_and_process(&mut self) -> HttpPoll {
         loop {
-            match self.in_buf.read_from(&mut self.socket) {
-                Ok(0) => {
-                    println!("Connection closed!;");
-                    return Ok(Async::Ready(()));
-                },
-                Ok(_) => {
-                    println!("Some bytes read!;");
-                },
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    return Ok(Async::NotReady);
+            while !try!(self.parse_request()) {
+                match try!(self.read_in()) {
+                    Async::Ready(0) => return Ok(Async::Ready(())),
+                    Async::Ready(_) => {},
+                    Async::NotReady => return Ok(Async::NotReady),
                 }
-                Err(e) => return Err(e),
-            };
-
-            // we're either parsing new request, or continue parsing body;
-            if try!(self.parse_request()) {
-                let req = self.request.take().unwrap();
-                let waiter = self.service.call(req);
-                self.in_flight.push_back(InFlight::Active(waiter));
-                // Need to drop part of buffer (current request)
-                // and stash the rest for next one.
             }
-            // self.in_buf.consume(bytes);
+            while !try!(self.parse_body()) {
+                match try!(self.read_in()) {
+                    Async::Ready(0) => return Ok(Async::Ready(())),
+                    Async::Ready(_) => {},
+                    Async::NotReady => return Ok(Async::NotReady),
+                }
+            }
+            let req = self.request.take().unwrap();
+            let waiter = self.service.call(req);
+            self.in_flight.push_back(InFlight::Active(waiter));
+        }
+    }
+
+    fn read_in(&mut self) -> Poll<usize, io::Error> {
+        match self.in_buf.read_from(&mut self.socket) {
+            Ok(size) => {
+                return Ok(Async::Ready(size));
+            },
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                return Ok(Async::NotReady)
+            },
+            Err(e) => return Err(e),
         }
     }
 
@@ -113,12 +119,25 @@ impl<T, S> HttpServer<T, S>
             match try!(Request::parse_from(&self.in_buf)) {
                 Async::NotReady => return Ok(false),
                 Async::Ready((req, size)) => {
+                    self.in_buf.consume(size);
                     self.request = Some(req);
                 },
             }
         }
-        match try!(self.request.as_mut().unwrap().parse_body(&mut self.socket)) {
-            Async::Ready(_) => Ok(true),
+        Ok(true)
+    }
+
+    fn parse_body(&mut self) -> Result<bool, io::Error> {
+        assert!(self.request.is_some());
+        let mut req = self.request.as_mut().unwrap();
+        match try!(Body::parse_from(&req, &mut self.in_buf)) {
+            Async::Ready(size) => {
+                let mut buf = Buf::new();
+                buf.extend(&self.in_buf[..size]);
+                self.in_buf.consume(size);
+                req.body = Some(Body::new(buf));
+                Ok(true)
+            },
             Async::NotReady => Ok(false),
         }
     }
