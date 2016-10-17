@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 
 use futures::{Future, Poll, Async};
 use tokio_core::io::{Io};
+use tokio_service::Service;
 use netbuf::Buf;
 
 use request::{Request, Body};
@@ -15,17 +16,6 @@ pub type HttpError = io::Error;
 pub type HttpPoll = Poll<(), HttpError>;
 
 
-pub trait HttpService {
-    type Request;
-    type Response;
-    type Error;
-    type Future: Future<Item=Self::Response, Error=Self::Error>;
-
-    fn call(&self, req: Self::Request) -> Self::Future;
-
-    fn poll_ready(&self) -> Async<()> { Async::Ready(()) }
-}
-
 pub trait NewHandler
 {
     type Handler;
@@ -36,7 +26,7 @@ pub trait NewHandler
 
 pub struct HttpServer<T, S>
     where S: Io,
-          T: HttpService<Request=Request, Response=Response, Error=HttpError>,
+          T: Service<Request=Request, Response=Response, Error=HttpError>,
 {
     socket: S,
     in_buf: Buf,
@@ -49,7 +39,7 @@ pub struct HttpServer<T, S>
 
 impl<T, S> HttpServer<T, S>
     where S: Io,
-          T: HttpService<Request=Request, Response=Response, Error=HttpError>,
+          T: Service<Request=Request, Response=Response, Error=HttpError>,
 {
 
     pub fn new(socket: S, service: T) -> HttpServer<T, S> {
@@ -182,7 +172,7 @@ impl<T, S> HttpServer<T, S>
 
 impl<T, S> Future for HttpServer<T, S>
     where S: Io,
-          T: HttpService<Request=Request, Response=Response, Error=HttpError>,
+          T: Service<Request=Request, Response=Response, Error=HttpError>,
 {
     type Item = ();
     type Error = io::Error;

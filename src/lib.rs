@@ -47,7 +47,6 @@ extern crate bytes;
 extern crate futures;
 extern crate httparse;
 extern crate tokio_core;
-extern crate tokio_proto;
 extern crate tokio_service;
 // extern crate url;
 extern crate netbuf;
@@ -65,6 +64,7 @@ use futures::Future;
 use futures::stream::{Stream};
 use tokio_core::reactor::Handle;
 use tokio_core::net::TcpListener;
+use tokio_service::NewService;
 
 pub use request::Request;
 pub use response::Response;
@@ -86,16 +86,15 @@ pub use error::Error;
 ///
 /// lp.run(futures::empty<(), ()>() ).unwrap();
 /// ```
-pub fn serve<S, H>(handle: &Handle, addr: SocketAddr, service: H)
-    where H: server::NewHandler<Handler=S> + 'static,
-          S: server::HttpService<Request=Request, Response=Response, Error=server::HttpError> + 'static,
+pub fn serve<S>(handle: &Handle, addr: SocketAddr, service: S)
+    where S: NewService<Request=Request, Response=Response, Error=server::HttpError> + 'static,
 {
     let listener = TcpListener::bind(&addr, handle).unwrap();
     let handle2 = handle.clone();
 
     handle.spawn(listener.incoming().for_each(move |(stream, addr)| {
         println!("Got incomming connection: {:?}, {:?}", stream, addr);
-        let handler = service.new_handler();
+        let handler = service.new_service().unwrap();
         handle2.spawn(
             server::HttpServer::new(stream, handler)
             .map(|_| {println!("done"); })

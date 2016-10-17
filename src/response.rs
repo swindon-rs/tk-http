@@ -6,6 +6,8 @@ use std::io::Write;
 // use futures::{Poll, Async};
 use netbuf::Buf;
 
+use super::request::Body;
+
 
 #[derive(Debug)]
 pub struct Response {
@@ -14,6 +16,7 @@ pub struct Response {
     reason: String,
 
     headers: Vec<(String, String)>,
+    body: Option<Body>,
 }
 
 impl Response {
@@ -25,6 +28,7 @@ impl Response {
             version: version,
 
             headers: Vec::with_capacity(16*2),
+            body: None,
         }
     }
     pub fn set_status(&mut self, code: u16) -> &mut Response {
