@@ -16,14 +16,6 @@ pub type HttpError = io::Error;
 pub type HttpPoll = Poll<(), HttpError>;
 
 
-pub trait NewHandler
-{
-    type Handler;
-
-    fn new_handler(&self) -> Self::Handler;
-}
-
-
 pub struct HttpServer<T, S>
     where S: Io,
           T: Service<Request=Request, Response=Response, Error=HttpError>,
@@ -119,9 +111,13 @@ impl<T, S> HttpServer<T, S>
 
     fn parse_body(&mut self) -> Result<bool, io::Error> {
         assert!(self.request.is_some());
+        if self.request.as_ref().unwrap().body.is_some() {
+            return Ok(true)
+        }
         let mut req = self.request.as_mut().unwrap();
         match try!(Body::parse_from(&req, &mut self.in_buf)) {
-            Async::Ready(size) => {
+            Async::Ready(None) => Ok(true),
+            Async::Ready(Some(size)) => {
                 let mut buf = Buf::new();
                 buf.extend(&self.in_buf[..size]);
                 self.in_buf.consume(size);

@@ -148,14 +148,14 @@ impl Body {
     }
 
     pub fn parse_from(request: &Request, buf: &Buf)
-        -> Poll<usize, io::Error>
+        -> Poll<Option<usize>, io::Error>
     {
         if let Some(clen) = request.content_length() {
             if buf.len() >= clen {
-                return Ok(Async::Ready(clen))
+                return Ok(Async::Ready(Some(clen)))
             }
         // } else if Some(ctype) = request.content_type() {
         }
-        Ok(Async::NotReady)
+        Ok(Async::Ready(None))
     }
 }
