@@ -41,7 +41,7 @@ impl GenericResponse for SimpleErrorPage {
         -> Self::Future
     {
         let content_length = PART1.len() + PART2.len() + PART3.len() +
-            4 + self.1.len();
+            2*(4 + self.1.as_bytes().len());
         response.status(self.0, self.1);
         response.add_length(content_length as u64).unwrap();
         response.add_header("Content-Type", "text/html").unwrap();
