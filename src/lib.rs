@@ -55,7 +55,7 @@ extern crate netbuf;
 pub mod request;
 pub mod response;
 pub mod server;
-pub mod headers;
+pub mod enums;
 mod error;
 
 use std::net::SocketAddr;
@@ -99,11 +99,6 @@ pub fn serve<S>(handle: &Handle, addr: SocketAddr, service: S)
             server::HttpServer::new(stream, handler)
             .map(|_| {println!("done"); })
             .map_err(|err| { println!("Got Error: {:?}", err); }));
-        // * Spawn handler for connection;
-        // * Count handled connections;
-        //let (reader, writer) = stream.split();
-        // Start handler task with two ends
-        // handle2.spawn();
         Ok(())
     }).map_err(|e| {
         println!("Server error: {:?}", e)

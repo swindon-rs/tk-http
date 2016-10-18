@@ -9,8 +9,7 @@ use futures::{Async, Poll};
 
 // use super::error::Error;
 use super::response::Response;
-
-use super::headers::{Method, Header};
+use super::enums::{Method, Version, Header};
 
 
 const MAX_HEADERS: usize = 64;
@@ -25,7 +24,7 @@ type Slice = (usize, usize);
 pub struct Request {
     pub method: Method,
     pub path: String,
-    pub version: u8,
+    pub version: Version,
 
     pub headers: Vec<(Header, String)>,
 
@@ -58,7 +57,7 @@ impl Request {
         };
         let mut req = Request {
             method: Method::from(parser.method.unwrap()),
-            version: parser.version.unwrap(),
+            version: parser.version.unwrap().into(),
             path: parser.path.unwrap().to_string(),
             headers: Vec::with_capacity(MAX_HEADERS),
             body: None,
@@ -92,7 +91,7 @@ impl Request {
     // Public interface
 
     pub fn new_response(&self) -> Response {
-        Response::new(self.version)
+        Response::new(self.version.clone())
     }
 
     pub fn has_body(&self) -> bool {

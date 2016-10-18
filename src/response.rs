@@ -7,11 +7,12 @@ use std::io::Write;
 use netbuf::Buf;
 
 use super::request::Body;
+use super::enums::Version;
 
 
 #[derive(Debug)]
 pub struct Response {
-    version: u8,
+    version: Version,
     code: u16,
     reason: String,
 
@@ -21,7 +22,7 @@ pub struct Response {
 
 impl Response {
 
-    pub fn new(version: u8) -> Response {
+    pub fn new(version: Version) -> Response {
         Response {
             code: 200,
             reason: "OK".to_string(),
@@ -54,8 +55,7 @@ impl Response {
     }
 
     fn write_status(&self, buf: &mut Buf) -> io::Result<()> {
-        write!(buf, "HTTP/1.{} {} {}\r\n",
-               self.version, self.code, self.reason)
+        write!(buf, "{} {} {}\r\n", self.version, self.code, self.reason)
     }
 
     fn write_headers(&self, buf: &mut Buf) -> io::Result<()> {
