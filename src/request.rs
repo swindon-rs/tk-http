@@ -8,7 +8,7 @@ use netbuf::Buf;
 use futures::{Async, Poll};
 
 use super::response::Response;
-use super::headers::{Method, Header};
+use super::enums::{Method, Header};
 use serve::ResponseConfig;
 use {Version};
 
@@ -71,13 +71,6 @@ impl Request {
         Ok(Async::Ready((req, bytes)))
     }
 
-    // pub fn parse_body(&mut self, buf: &mut Buf) -> Poll<(), io::Error> {
-    //     if let Some(body_size) = self.content_length() {
-    //         println!("Must read {} bytes", body_size);
-    //     }
-    //     Ok(Async::Ready(()))
-    // }
-
     fn parse_headers(&mut self, parser: httparse::Request) {
         for h in parser.headers.iter() {
             let header = Header::from(h.name);
@@ -96,6 +89,11 @@ impl Request {
         }
     }
 
+    // Public interface
+
+    pub fn new_response(&self) -> Response {
+        Response::new(self.version)
+    }
     pub fn has_body(&self) -> bool {
         self.body.is_some()
     }

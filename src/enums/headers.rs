@@ -1,3 +1,4 @@
+use std::fmt;
 use std::convert::From;
 use std::ascii::AsciiExt;
 
@@ -12,7 +13,7 @@ use std::ascii::AsciiExt;
 ///     _ => {}
 ///     }
 /// ```
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Method {
     Options,
     Get,
@@ -45,16 +46,15 @@ impl<'a> From<&'a str> for Method
 
 
 /// Enum Representing HTTP Request Headers.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Header {
     Host,
     Connection,
     KeepAlive,
-    // add some more
     ContentLength,
+    // add some more
     Raw(String),
 }
-
 
 impl<'a> From<&'a str> for Header {
 

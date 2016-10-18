@@ -6,7 +6,7 @@ use std::ascii::AsciiExt;
 
 use netbuf::Buf;
 
-use version::Version;
+use enums::Version;
 
 quick_error! {
     #[derive(Debug)]

@@ -33,6 +33,7 @@ pub struct HttpServer<T>
     request: Option<Request>,
     service: T,
     in_flight: VecDeque<InFlight<T::Future, T::Response>>,
+    done: bool,
 }
 
 impl<T> HttpServer<T>
@@ -48,11 +49,12 @@ impl<T> HttpServer<T>
             // out_body: None,
             service: service,
             in_flight: VecDeque::with_capacity(32),
+            done: false,
         }
     }
 
     fn is_done(&self) -> bool {
-        false
+        self.done
     }
 
     fn flush(&mut self) -> Poll<(), Error> {
@@ -87,14 +89,20 @@ impl<T> HttpServer<T>
         loop {
             while !try!(self.parse_request()) {
                 match try!(self.read_in()) {
-                    Async::Ready(0) => return Ok(Async::Ready(())),
+                    Async::Ready(0) => {
+                        self.done = true;
+                        return Ok(Async::Ready(()))
+                    },
                     Async::Ready(_) => {},
                     Async::NotReady => return Ok(Async::NotReady),
                 }
             }
             while !try!(self.parse_body()) {
                 match try!(self.read_in()) {
-                    Async::Ready(0) => return Ok(Async::Ready(())),
+                    Async::Ready(0) => {
+                        self.done = true;
+                        return Ok(Async::Ready(()))
+                    },
                     Async::Ready(_) => {},
                     Async::NotReady => return Ok(Async::NotReady),
                 }

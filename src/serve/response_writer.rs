@@ -6,7 +6,7 @@ use tokio_core::net::TcpStream;
 use tokio_core::io::{WriteAll, write_all};
 
 use base_serializer::{MessageState, Message, HeaderError};
-use version::Version;
+use enums::Version;
 
 
 /// This response is returned when Response is dropping without writing
