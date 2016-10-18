@@ -22,7 +22,7 @@ const PART2: &'static str = "\
 const PART3: &'static str = concat!("\
             </h1>\
             <hr>\
-            <p>Yours failthfully,<br>\
+            <p>Yours faithfully,<br>\
                 minihttp/", env!("CARGO_PKG_VERSION"), "\
             </p>
         </body>
