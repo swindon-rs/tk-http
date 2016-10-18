@@ -1,45 +1,49 @@
-use std::io;
-// use std::io::Write;
+use std::io::{self, Write};
 use std::collections::VecDeque;
 
 use futures::{Future, Poll, Async};
-use tokio_core::io::{Io};
+use tokio_core::net::TcpStream;
 use tokio_service::Service;
 use netbuf::Buf;
 
-use request::{Request, Body};
-use response::Response;
-// use error::Error;
+use request::{Request, Body, response_config};
+use serve::{ResponseConfig, ResponseWriter};
+use {GenericResponse, Error};
 
 
-pub type HttpError = io::Error;
-pub type HttpPoll = Poll<(), HttpError>;
-
-
-pub struct HttpServer<T, S>
-    where S: Io,
-          T: Service<Request=Request, Response=Response, Error=HttpError>,
+enum InFlight<F, R>
+    where F: Future<Item=R>,
+          R: GenericResponse,
 {
-    socket: S,
+    Service(ResponseConfig, F),
+    Waiting(ResponseConfig, R),
+    Responding(R::Future),
+}
+
+
+pub struct HttpServer<T>
+    where T: Service<Request=Request, Error=Error>,
+          T::Response: GenericResponse,
+{
+    /// Socket and output buffer, it's None when connection is borrowed by
+    ///
+    conn: Option<(TcpStream, Buf)>,
     in_buf: Buf,
     request: Option<Request>,
-    out_buf: Buf,
-    // out_body: Option<Buf>,
     service: T,
-    in_flight: VecDeque<InFlight<T::Future>>,
+    in_flight: VecDeque<InFlight<T::Future, T::Response>>,
     done: bool,
 }
 
-impl<T, S> HttpServer<T, S>
-    where S: Io,
-          T: Service<Request=Request, Response=Response, Error=HttpError>,
+impl<T> HttpServer<T>
+    where T: Service<Request=Request, Error=Error>,
+          T::Response: GenericResponse,
 {
 
-    pub fn new(socket: S, service: T) -> HttpServer<T, S> {
+    pub fn new(socket: TcpStream, service: T) -> HttpServer<T> {
         HttpServer {
-            socket: socket,
+            conn: Some((socket, Buf::new())),
             in_buf: Buf::new(),
-            out_buf: Buf::new(),
             request: None,
             // out_body: None,
             service: service,
@@ -48,23 +52,39 @@ impl<T, S> HttpServer<T, S>
         }
     }
 
-    fn flush(&mut self) -> HttpPoll {
-        match self.socket.flush() {
-            Ok(_) => {
-                Ok(Async::Ready(()))
-            },
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                Ok(Async::NotReady)
-            },
-            Err(e) => Err(e),
-        }
-    }
-
     fn is_done(&self) -> bool {
         self.done
     }
 
-    fn read_and_process(&mut self) -> HttpPoll {
+    fn flush(&mut self) -> Poll<(), Error> {
+        if let Some((ref mut sock, ref mut buf)) = self.conn {
+            loop {
+                match buf.write_to(sock) {
+                    Ok(_) => break,
+                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock
+                    => {
+                        break;
+                    }
+                    Err(e) => {
+                        return Err(e.into());
+                    },
+                }
+            }
+            match sock.flush() {
+                Ok(_) => {
+                    Ok(Async::Ready(()))
+                },
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    Ok(Async::NotReady)
+                },
+                Err(e) => Err(e.into()),
+            }
+        } else {
+            Ok(Async::Ready(()))
+        }
+    }
+
+    fn read_and_process(&mut self) -> Poll<(), Error> {
         loop {
             while !try!(self.parse_request()) {
                 match try!(self.read_in()) {
@@ -87,20 +107,25 @@ impl<T, S> HttpServer<T, S>
                 }
             }
             let req = self.request.take().unwrap();
+            let cfg = response_config(&req);
             let waiter = self.service.call(req);
-            self.in_flight.push_back(InFlight::Active(waiter));
+            self.in_flight.push_back((InFlight::Service(cfg, waiter)));
         }
     }
 
     fn read_in(&mut self) -> Poll<usize, io::Error> {
-        match self.in_buf.read_from(&mut self.socket) {
-            Ok(size) => {
-                return Ok(Async::Ready(size));
-            },
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                return Ok(Async::NotReady)
-            },
-            Err(e) => return Err(e),
+        if let Some((ref mut sock, _)) = self.conn {
+            match self.in_buf.read_from(sock) {
+                Ok(size) => {
+                    return Ok(Async::Ready(size));
+                },
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    return Ok(Async::NotReady)
+                },
+                Err(e) => return Err(e),
+            }
+        } else {
+            Ok(Async::NotReady)
         }
     }
 
@@ -136,57 +161,63 @@ impl<T, S> HttpServer<T, S>
         }
     }
 
-    fn write_and_dispose(&mut self) -> HttpPoll {
-        // if future is done -> start writing response;
-        // if response has body: schedule to send body;
-        if let Some(res) = self.poll_waiters() {
-            let resp = try!(res);
-            try!(resp.write_to(&mut self.out_buf));
-        };
-
-        loop {
-            match self.out_buf.write_to(&mut self.socket) {
-                Ok(_) => {
-                    return Ok(Async::Ready(()));
+    fn poll_waiters(&mut self) -> Result<(), Error> {
+        for waiter in self.in_flight.iter_mut() {
+            let waiting = match waiter {
+                &mut InFlight::Service(cfg, ref mut f) => {
+                    match f.poll() {
+                        Ok(Async::Ready(res)) => Some((cfg, res)),
+                        Ok(Async::NotReady) => None,
+                        Err(e) => return Err(e),
+                    }
                 },
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    return Ok(Async::NotReady);
-                },
-                Err(e) => {
-                    return Err(e);
-                },
+                _ => None
+            };
+            if let Some((cfg, value)) = waiting {
+                *waiter = InFlight::Waiting(cfg, value);
             }
         }
-    }
-
-    fn poll_waiters(&mut self) -> Option<Result<T::Response, T::Error>> {
-        for waiter in self.in_flight.iter_mut() {
-            waiter.poll();
-        }
-        match self.in_flight.front() {
-            Some(&InFlight::Done(_)) => {},
-            _ => return None,
-        };
-        match self.in_flight.pop_front() {
-            Some(InFlight::Done(res)) => Some(res),
-            _ => None
+        loop {
+            match self.in_flight.front_mut() {
+                Some(&mut InFlight::Responding(ref mut fut)) => {
+                    match try!(fut.poll()) {
+                        Async::Ready((sock, buf)) => {
+                            self.conn = Some((sock, buf));
+                        }
+                        Async::NotReady => return Ok(()),
+                    }
+                }
+                Some(&mut InFlight::Waiting(..)) => {}
+                _ => return Ok(()),
+            };
+            match self.in_flight.pop_front() {
+                Some(InFlight::Responding(_)) => continue,
+                Some(InFlight::Waiting(cfg, response)) => {
+                    let (sock, buf) = self.conn.take()
+                        .expect("connection is owned");
+                    self.in_flight.push_front(InFlight::Responding(
+                        response.into_serializer(ResponseWriter::new(sock, buf,
+                            cfg.version, cfg.is_head, cfg.do_close))));
+                }
+                _ => unreachable!(),
+            };
         }
     }
 }
 
-impl<T, S> Future for HttpServer<T, S>
-    where S: Io,
-          T: Service<Request=Request, Response=Response, Error=HttpError>,
+impl<T> Future for HttpServer<T>
+    where T: Service<Request=Request, Error=Error>,
+          T::Response: GenericResponse,
 {
     type Item = ();
-    type Error = io::Error;
+    type Error = Error;
 
-    fn poll(&mut self) -> HttpPoll {
+    fn poll(&mut self) -> Poll<(), Error> {
         try!(self.flush());
 
         try!(self.read_and_process());
 
-        try!(self.write_and_dispose());
+        try!(self.poll_waiters());
 
         try!(self.flush());
 
@@ -194,29 +225,5 @@ impl<T, S> Future for HttpServer<T, S>
             return Ok(Async::Ready(()));
         }
         Ok(Async::NotReady)
-    }
-}
-
-
-enum InFlight<F>
-    where F: Future,
-{
-    Active(F),
-    Done(Result<F::Item, F::Error>),
-}
-
-impl<F: Future> InFlight<F> {
-    pub fn poll(&mut self) {
-        let res = match *self {
-            InFlight::Active(ref mut f) => {
-                match f.poll() {
-                    Ok(Async::Ready(res)) => Ok(res),
-                    Ok(Async::NotReady) => return,
-                    Err(e) => Err(e),
-                }
-            },
-            _ => return
-        };
-        *self = InFlight::Done(res);
     }
 }

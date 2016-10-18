@@ -7,28 +7,39 @@
 //! ```rust,no_run
 //! extern crate futures;
 //! extern crate minihttp;
+//! extern crate netbuf;
 //! extern crate tokio_core;
 //! extern crate tokio_service;
 //! use std::io;
+//! use netbuf::Buf;
 //! use tokio_service::{Service, NewService};
 //! use tokio_core::reactor::Core;
-//! use futures::{Finished, Async};
+//! use tokio_core::net::TcpStream;
+//! use futures::{Async, Finished, finished};
+//! use minihttp::{Request, Error, ResponseFn};
 //!
 //! #[derive(Clone)]
 //! struct HelloWorld;
 //!
 //! impl Service for HelloWorld {
-//!     type Request = minihttp::Request;
-//!     type Response = minihttp::Response;
-//!     type Error = io::Error;
-//!     type Future = Finished<minihttp::Response, io::Error>;
+//!    type Request = Request;
+//!    type Response = ResponseFn<Finished<(TcpStream, Buf), Error>>;
+//!    type Error = Error;
+//!    type Future = Finished<Self::Response, Error>;
 //!
-//!     fn call(&self, req: minihttp::Request) -> Self::Future {
-//!         let resp = req.new_response();
-//!         // resp.header("Content-Type", "text/plain");
-//!         // resp.body("Hello, World");
-//!         futures::finished(resp)
-//!
+//!     fn call(&self, _req: minihttp::Request) -> Self::Future {
+//!        // Note: rather than allocating a response object, we return
+//!        // a lambda that pushes headers into `ResponseWriter` which
+//!        // writes them directly into response buffer without allocating
+//!        // intermediate structures
+//!        finished(ResponseFn::new(move |mut res| {
+//!            res.status(200, "OK");
+//!            res.add_chunked().unwrap();
+//!            if res.done_headers().unwrap() {
+//!                res.write_body(b"Hello world!");
+//!            }
+//!            res.done()
+//!        }))
 //!     }
 //!     fn poll_ready(&self) -> Async<()> { Async::Ready(()) }
 //! }
@@ -48,15 +59,19 @@ extern crate futures;
 extern crate httparse;
 extern crate tokio_core;
 extern crate tokio_service;
-// extern crate url;
 extern crate netbuf;
+#[macro_use(quick_error)] extern crate quick_error;
+#[macro_use] extern crate matches;
 
 
 pub mod request;
-pub mod response;
 pub mod server;
 pub mod enums;
 mod error;
+mod lambda;
+mod simple_error_page;
+mod serve;
+mod base_serializer;
 
 use std::net::SocketAddr;
 
@@ -66,9 +81,12 @@ use tokio_core::reactor::Handle;
 use tokio_core::net::TcpListener;
 use tokio_service::NewService;
 
+pub use enums::Version;
 pub use request::Request;
-pub use response::Response;
 pub use error::Error;
+pub use serve::{GenericResponse, ResponseWriter};
+pub use lambda::ResponseFn;
+pub use simple_error_page::SimpleErrorPage;
 
 
 /// Bind to address and start serving the service
@@ -87,7 +105,8 @@ pub use error::Error;
 /// lp.run(futures::empty<(), ()>() ).unwrap();
 /// ```
 pub fn serve<S>(handle: &Handle, addr: SocketAddr, service: S)
-    where S: NewService<Request=Request, Response=Response, Error=server::HttpError> + 'static,
+    where S: NewService<Request=Request, Error=Error> + 'static,
+          S::Response: GenericResponse,
 {
     let listener = TcpListener::bind(&addr, handle).unwrap();
     let handle2 = handle.clone();

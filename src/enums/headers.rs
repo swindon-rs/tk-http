@@ -1,4 +1,3 @@
-use std::fmt;
 use std::convert::From;
 use std::ascii::AsciiExt;
 
@@ -28,7 +27,7 @@ pub enum Method {
 
 impl<'a> From<&'a str> for Method
 {
-    
+
     fn from(s: &'a str) -> Method {
         match s {
             "OPTIONS"   => Method::Options,
@@ -45,33 +44,6 @@ impl<'a> From<&'a str> for Method
 }
 
 
-/// Enum reprsenting HTTP version.
-#[derive(Debug, PartialEq, Clone)]
-pub enum Version {
-    Http10,
-    Http11,
-}
-
-impl From<u8> for Version {
-    fn from(v: u8) -> Version {
-        match v {
-            0 => Version::Http10,
-            1 => Version::Http11,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl fmt::Display for Version {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Version::Http10 => f.write_str("HTTP/1.0"),
-            Version::Http11 => f.write_str("HTTP/1.1"),
-        }
-    }
-}
-
-
 /// Enum Representing HTTP Request Headers.
 #[derive(Debug, PartialEq)]
 pub enum Header {
@@ -81,7 +53,7 @@ pub enum Header {
     ContentLength,
     // add some more
     Raw(String),
-} 
+}
 
 impl<'a> From<&'a str> for Header {
 
