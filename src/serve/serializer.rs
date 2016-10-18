@@ -1,6 +1,6 @@
 use futures::Future;
 use netbuf::Buf;
-use {Error};
+use {Error, ResponseConfig};
 
 use tokio_core::net::TcpStream;
 
@@ -29,6 +29,6 @@ pub trait GenericResponse {
     ///
     /// When serializer is going to write to the socket directly it's required
     /// to flush the data from the buffer into the socket first.
-    fn make_serializer(self, sock: TcpStream, buf: Buf)
+    fn make_serializer(self, sock: TcpStream, buf: Buf, cfg: ResponseConfig)
         -> Self::Serializer;
 }

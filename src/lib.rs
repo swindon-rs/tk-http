@@ -50,6 +50,8 @@ extern crate tokio_core;
 extern crate tokio_service;
 // extern crate url;
 extern crate netbuf;
+#[macro_use(quick_error)] extern crate quick_error;
+#[macro_use] extern crate matches;
 
 
 pub mod request;
@@ -57,8 +59,10 @@ pub mod response;
 pub mod server;
 pub mod headers;
 mod error;
+mod version;
 mod simple_error_page;
 mod serve;
+mod base_serializer;
 
 use std::net::SocketAddr;
 
@@ -68,10 +72,11 @@ use tokio_core::reactor::Handle;
 use tokio_core::net::TcpListener;
 use tokio_service::NewService;
 
+pub use version::Version;
 pub use request::Request;
 pub use response::Response;
 pub use error::Error;
-pub use serve::GenericResponse;
+pub use serve::{GenericResponse, ResponseConfig};
 pub use simple_error_page::SimpleErrorPage;
 
 
