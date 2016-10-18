@@ -57,6 +57,8 @@ pub mod response;
 pub mod server;
 pub mod headers;
 mod error;
+mod simple_error_page;
+mod serve;
 
 use std::net::SocketAddr;
 
@@ -69,6 +71,8 @@ use tokio_service::NewService;
 pub use request::Request;
 pub use response::Response;
 pub use error::Error;
+pub use serve::GenericResponse;
+pub use simple_error_page::SimpleErrorPage;
 
 
 /// Bind to address and start serving the service
