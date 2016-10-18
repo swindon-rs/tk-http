@@ -1,4 +1,8 @@
+use std::io;
+
 use netbuf::Buf;
+use futures::{Finished, finished};
+use tokio_core::net::TcpStream;
 
 use base_serializer::{MessageState, Message, HeaderError};
 use version::Version;
@@ -22,37 +26,31 @@ pub const NOT_IMPLEMENTED_HEAD: &'static str = concat!(
     "\r\n",
     );
 
-pub struct Response<'a>(Message<'a>);
-
-impl<'a> From<Message<'a>> for Response<'a> {
-    fn from(msg: Message) -> Response {
-        Response(msg)
-    }
-}
+pub struct ResponseWriter(Message, TcpStream);
 
 // TODO: Support responses to CONNECT and `Upgrade: websocket` requests.
-impl<'a> Response<'a> {
+impl ResponseWriter {
     /// Creates new response message by extracting needed fields from Head.
-    pub fn new(out_buf: &mut Buf, version: Version,
-        is_head: bool, do_close: bool) -> Response
+    pub fn new(sock: TcpStream, out_buf: Buf, version: Version,
+        is_head: bool, do_close: bool) -> ResponseWriter
     {
-        use message::Body::*;
+        use base_serializer::Body::*;
         // TODO(tailhook) implement Connection: Close,
         // (including explicit one in HTTP/1.0) and maybe others
-        MessageState::ResponseStart {
+        ResponseWriter(Message(out_buf, MessageState::ResponseStart {
             body: if is_head { Head } else { Normal },
             version: version,
             close: do_close || version == Version::Http10,
-        }.with(out_buf)
+        }), sock)
     }
     /// Returns true if it's okay to proceed with keep-alive connection
     pub fn finish(self) -> bool {
-        use message::MessageState::*;
-        use message::Body::*;
+        use base_serializer::MessageState::*;
+        use base_serializer::Body::*;
         if self.is_complete() {
             return true;
         }
-        let (buf, me) = self.0.decompose();
+        let (mut buf, me) = self.0.decompose();
         match me {
             // If response is not even started yet, send something to make
             // debugging easier
@@ -116,10 +114,10 @@ impl<'a> Response<'a> {
     /// # Panics
     ///
     /// Panics when `add_header` is called in the wrong state.
-    pub fn add_header(&mut self, name: &str, value: &[u8])
+    pub fn add_header<V: AsRef<[u8]>>(&mut self, name: &str, value: V)
         -> Result<(), HeaderError>
     {
-        self.0.add_header(name, value)
+        self.0.add_header(name, value.as_ref())
     }
     /// Add a content length to the message.
     ///
@@ -206,11 +204,20 @@ impl<'a> Response<'a> {
     /// # Panics
     ///
     /// When the response is in the wrong state.
-    pub fn done(&mut self) {
-        self.0.done()
+    pub fn done<E>(mut self) -> Finished<(TcpStream, Buf), E> {
+        self.0.done();
+        finished((self.1, (self.0).0))
     }
 }
 
-pub fn state(resp: Response) -> MessageState {
-    resp.0.state()
+impl io::Write for ResponseWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // TODO(tailhook) we might want to propatage error correctly
+        // rather than panic
+        self.write_body(buf);
+        Ok((buf.len()))
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }

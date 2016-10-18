@@ -85,17 +85,9 @@ pub enum Body {
 ///
 /// Specific wrappers are exposed in `server` and `client` modules.
 /// This type is private for the crate.
-pub struct Message<'a>(&'a mut Buf, MessageState);
+pub struct Message(pub Buf, pub MessageState);
 
-impl MessageState {
-    pub fn with<'x, I>(self, out_buf: &'x mut Buf) -> I
-        where I: From<Message<'x>>
-    {
-        Message(out_buf, self).into()
-    }
-}
-
-impl<'a> Message<'a> {
+impl Message {
     /// Write status line.
     ///
     /// This puts status line into a buffer immediately. If you don't
@@ -445,14 +437,15 @@ impl<'a> Message<'a> {
     pub fn state(self) -> MessageState {
         self.1
     }
-    pub fn decompose(self) -> (&'a mut Buf, MessageState) {
+
+    pub fn decompose(self) -> (Buf, MessageState) {
         (self.0, self.1)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use rotor_stream::Buf;
+    use netbuf::Buf;
     use super::{Message, MessageState, Body};
     use version::Version;
 
@@ -464,7 +457,7 @@ mod test {
 
     fn do_request<F: FnOnce(Message)>(fun: F) -> Buf {
         let mut buf = Buf::new();
-        fun(MessageState::RequestStart.with(&mut buf));
+        fun(Message(buf, MessageState::RequestStart));
         return buf;
     }
     fn do_response10<F: FnOnce(Message)>(fun: F) -> Buf {

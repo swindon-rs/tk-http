@@ -1,11 +1,11 @@
 use std::io::Write;
 
 use netbuf::Buf;
-use futures::{Finished, finished};
+use futures::Finished;
 use tokio_core::net::TcpStream;
 
 use serve::GenericResponse;
-use {Error, ResponseConfig};
+use {Error, ResponseWriter};
 
 const PART1: &'static str = "\
     <!DOCTYPE html>
@@ -36,26 +36,22 @@ const PART3: &'static str = concat!("\
 pub struct SimpleErrorPage(u16, &'static str);
 
 impl GenericResponse for SimpleErrorPage {
-    type Serializer = Finished<(TcpStream, Buf), Error>;
-    fn make_serializer(self, sock: TcpStream, mut buf: Buf,
-                             config: ResponseConfig)
-        -> Self::Serializer
+    type Future = Finished<(TcpStream, Buf), Error>;
+    fn make_serializer(self, mut response: ResponseWriter)
+        -> Self::Future
     {
         let content_length = PART1.len() + PART2.len() + PART3.len() +
             4 + self.1.len();
-        write!(&mut buf, "{code:03} {status}\r\n\
-            Content-Length: {length}\r\n\
-            Connection: close\r\n\
-            \r\n",
-            code=self.0, status=self.1, length=content_length)
-            .expect("writing to a buffer always succeeds");
-        if !config.is_head {
-            write!(&mut buf, "\
+        response.status(self.0, self.1);
+        response.add_length(content_length as u64).unwrap();
+        response.add_header("Content-Type", "text/html").unwrap();
+        if response.done_headers().unwrap() {
+            write!(&mut response, "\
                 {p1}{code:03} {status}{p2}{code:03} {status}{p3}",
                     code=self.0, status=self.1,
                     p1=PART1, p2=PART2, p3=PART3)
-            .expect("writing to a buffer always succeeds");
+                .expect("writing to a buffer always succeeds");
         }
-        finished((sock, buf))
+        response.done()
     }
 }

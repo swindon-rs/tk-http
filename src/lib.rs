@@ -76,7 +76,7 @@ pub use version::Version;
 pub use request::Request;
 pub use response::Response;
 pub use error::Error;
-pub use serve::{GenericResponse, ResponseConfig};
+pub use serve::{GenericResponse, ResponseConfig, ResponseWriter};
 pub use simple_error_page::SimpleErrorPage;
 
 
