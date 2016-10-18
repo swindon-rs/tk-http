@@ -452,8 +452,9 @@ impl Message {
 #[cfg(test)]
 mod test {
     use netbuf::Buf;
+
     use super::{Message, MessageState, Body};
-    use version::Version;
+    use enums::Version;
 
     #[test]
     fn message_size() {
@@ -461,38 +462,34 @@ mod test {
         assert_eq!(::std::mem::size_of::<MessageState>(), 16);
     }
 
-    fn do_request<F: FnOnce(Message)>(fun: F) -> Buf {
-        let mut buf = Buf::new();
-        fun(Message(buf, MessageState::RequestStart));
-        return buf;
+    fn do_request<F>(fun: F) -> Buf
+        where F: FnOnce(Message) -> Buf
+    {
+        fun(Message(Buf::new(), MessageState::RequestStart))
     }
-    fn do_response10<F: FnOnce(Message)>(fun: F) -> Buf {
-        let mut buf = Buf::new();
-        fun(MessageState::ResponseStart {
+    fn do_response10<F: FnOnce(Message) -> Buf>(fun: F) -> Buf {
+        fun(Message(Buf::new(), MessageState::ResponseStart {
             version: Version::Http10,
             body: Body::Normal,
             close: false,
-        }.with(&mut buf));
-        return buf;
+        }))
     }
-    fn do_response11<F: FnOnce(Message)>(close: bool, fun: F) -> Buf {
-        let mut buf = Buf::new();
-        fun(MessageState::ResponseStart {
+    fn do_response11<F: FnOnce(Message) -> Buf>(close: bool, fun: F) -> Buf {
+        fun(Message(Buf::new(), MessageState::ResponseStart {
             version: Version::Http11,
             body: Body::Normal,
             close: close,
-        }.with(&mut buf));
-        return buf;
+        }))
     }
 
-    fn do_head_response11<F: FnOnce(Message)>(close: bool, fun: F) -> Buf {
-        let mut buf = Buf::new();
-        fun(MessageState::ResponseStart {
+    fn do_head_response11<F: FnOnce(Message) -> Buf>(close: bool, fun: F)
+        -> Buf
+    {
+        fun(Message(Buf::new(), MessageState::ResponseStart {
             version: Version::Http11,
             body: Body::Head,
             close: close,
-        }.with(&mut buf));
-        return buf;
+        }))
     }
 
     #[test]
@@ -500,7 +497,7 @@ mod test {
         assert_eq!(&do_request(|mut msg| {
             msg.request_line("GET", "/", Version::Http10);
             msg.done_headers().unwrap();
-            msg.done();
+            msg.0
         })[..], "GET / HTTP/1.0\r\n\r\n".as_bytes());
     }
 
@@ -510,7 +507,7 @@ mod test {
             msg.response_status(200, "OK");
             msg.add_length(0).unwrap();
             msg.done_headers().unwrap();
-            msg.done();
+            msg.0
         })[..], "HTTP/1.0 200 OK\r\nContent-Length: 0\r\n\r\n".as_bytes());
     }
 
@@ -520,7 +517,7 @@ mod test {
             msg.response_status(200, "OK");
             msg.add_length(0).unwrap();
             msg.done_headers().unwrap();
-            msg.done();
+            msg.0
         })[..], "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".as_bytes());
     }
 
@@ -530,7 +527,7 @@ mod test {
             msg.response_status(200, "OK");
             msg.add_length(0).unwrap();
             msg.done_headers().unwrap();
-            msg.done();
+            msg.0
         })[..], concat!("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n",
                         "Connection: close\r\n\r\n").as_bytes());
     }
@@ -542,7 +539,7 @@ mod test {
             msg.add_length(5).unwrap();
             msg.done_headers().unwrap();
             msg.write_body(b"Hello");
-            msg.done();
+            msg.0
         })[..], "HEAD / HTTP/1.1\r\nContent-Length: 5\r\n\r\nHello".as_bytes());
     }
 
@@ -553,7 +550,7 @@ mod test {
             msg.response_status(200, "OK");
             msg.add_length(500).unwrap();
             msg.done_headers().unwrap();
-            msg.done();
+            msg.0
         })[..], "HTTP/1.1 200 OK\r\nContent-Length: 500\r\n\r\n".as_bytes());
     }
 
@@ -564,7 +561,7 @@ mod test {
             msg.response_status(142, "Foo");
             msg.add_length(500).unwrap_err();
             msg.done_headers().unwrap();
-            msg.done();
+            msg.0
         })[..], "HTTP/1.1 142 Foo\r\n\r\n".as_bytes());
     }
 }

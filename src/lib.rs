@@ -7,28 +7,39 @@
 //! ```rust,no_run
 //! extern crate futures;
 //! extern crate minihttp;
+//! extern crate netbuf;
 //! extern crate tokio_core;
 //! extern crate tokio_service;
 //! use std::io;
+//! use netbuf::Buf;
 //! use tokio_service::{Service, NewService};
 //! use tokio_core::reactor::Core;
-//! use futures::{Finished, Async};
+//! use tokio_core::net::TcpStream;
+//! use futures::{Async, Finished, finished};
+//! use minihttp::{Request, Error, ResponseFn};
 //!
 //! #[derive(Clone)]
 //! struct HelloWorld;
 //!
 //! impl Service for HelloWorld {
-//!     type Request = minihttp::Request;
-//!     type Response = minihttp::Response;
-//!     type Error = io::Error;
-//!     type Future = Finished<minihttp::Response, io::Error>;
+//!    type Request = Request;
+//!    type Response = ResponseFn<Finished<(TcpStream, Buf), Error>>;
+//!    type Error = Error;
+//!    type Future = Finished<Self::Response, Error>;
 //!
-//!     fn call(&self, req: minihttp::Request) -> Self::Future {
-//!         let resp = req.new_response();
-//!         // resp.header("Content-Type", "text/plain");
-//!         // resp.body("Hello, World");
-//!         futures::finished(resp)
-//!
+//!     fn call(&self, _req: minihttp::Request) -> Self::Future {
+//!        // Note: rather than allocating a response object, we return
+//!        // a lambda that pushes headers into `ResponseWriter` which
+//!        // writes them directly into response buffer without allocating
+//!        // intermediate structures
+//!        finished(ResponseFn::new(move |mut res| {
+//!            res.status(200, "OK");
+//!            res.add_chunked().unwrap();
+//!            if res.done_headers().unwrap() {
+//!                res.write_body(b"Hello world!");
+//!            }
+//!            res.done()
+//!        }))
 //!     }
 //!     fn poll_ready(&self) -> Async<()> { Async::Ready(()) }
 //! }
