@@ -9,7 +9,6 @@ extern crate tk_sendfile;
 extern crate env_logger;
 
 use std::env;
-use std::io;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
@@ -60,7 +59,7 @@ impl Service for HelloWorld {
     type Error = Error;
     type Future = futures::Finished<Self::Response, Self::Error>;
 
-    fn call(&self, req: Self::Request) -> Self::Future {
+    fn call(&self, _req: Self::Request) -> Self::Future {
         futures::finished(Response(self.pool.clone(), self.path.clone()))
     }
 

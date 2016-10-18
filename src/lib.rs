@@ -48,7 +48,6 @@ extern crate futures;
 extern crate httparse;
 extern crate tokio_core;
 extern crate tokio_service;
-// extern crate url;
 extern crate netbuf;
 #[macro_use(quick_error)] extern crate quick_error;
 #[macro_use] extern crate matches;

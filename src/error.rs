@@ -1,8 +1,5 @@
-use std::error;
-use std::fmt;
 use std::io;
 use std::convert::From;
-use std::cmp::PartialEq;
 
 use httparse;
 

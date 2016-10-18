@@ -7,7 +7,6 @@ use tokio_service::Service;
 use netbuf::Buf;
 
 use request::{Request, Body, response_config};
-use response::Response;
 use serve::{ResponseConfig, ResponseWriter};
 use {GenericResponse, Error};
 

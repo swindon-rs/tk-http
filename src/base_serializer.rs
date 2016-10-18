@@ -41,10 +41,12 @@ quick_error! {
 #[derive(Debug)]
 pub enum MessageState {
     /// Nothing has been sent.
+    #[allow(dead_code)] // until we implement client requests
     ResponseStart { version: Version, body: Body, close: bool },
     /// A continuation line has been sent.
     FinalResponseStart { version: Version, body: Body, close: bool },
     /// Nothing has been sent.
+    #[allow(dead_code)] // until we implement client requests
     RequestStart,
     /// Status line is already in the buffer.
     Headers { body: Body, close: bool },
@@ -78,6 +80,7 @@ pub enum Body {
     /// 204 (No Content), and 304 (Not Modified) responses
     Denied,
     /// The message is a request and always contains a body (maybe empty).
+    #[allow(dead_code)] // until we implement client requests
     Request,
 }
 
@@ -136,6 +139,7 @@ impl Message {
     ///
     /// When request line is already written. It's expected that your request
     /// handler state machine will never call the method twice.
+    #[allow(dead_code)] // until we implement client requests
     pub fn request_line(&mut self, method: &str, path: &str, version: Version)
     {
         use self::Body::*;
@@ -438,10 +442,6 @@ impl Message {
                        state);
             }
         }
-    }
-
-    pub fn state(self) -> MessageState {
-        self.1
     }
 
     pub fn decompose(self) -> (Buf, MessageState) {
