@@ -196,7 +196,7 @@ impl<T> HttpServer<T>
                     let (sock, buf) = self.conn.take()
                         .expect("connection is owned");
                     self.in_flight.push_front(InFlight::Responding(
-                        response.make_serializer(ResponseWriter::new(sock, buf,
+                        response.into_serializer(ResponseWriter::new(sock, buf,
                             cfg.version, cfg.is_head, cfg.do_close))));
                 }
                 _ => unreachable!(),

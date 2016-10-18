@@ -33,7 +33,7 @@ struct Response(DiskPool, PathBuf);
 
 impl GenericResponse for Response {
     type Future = BoxFuture<(TcpStream, Buf), Error>;
-    fn make_serializer(self, mut response: ResponseWriter)
+    fn into_serializer(self, mut response: ResponseWriter)
         -> Self::Future
     {
         self.0.open(self.1)

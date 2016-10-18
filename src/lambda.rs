@@ -22,7 +22,7 @@ impl<T> GenericResponse for ResponseFn<T>
 {
     type Future = T::Future;
 
-    fn make_serializer(mut self, writer: ResponseWriter) -> Self::Future
+    fn into_serializer(mut self, writer: ResponseWriter) -> Self::Future
     {
         (self.0)(writer).into_future()
     }

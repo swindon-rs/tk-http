@@ -37,7 +37,7 @@ pub struct SimpleErrorPage(u16, &'static str);
 
 impl GenericResponse for SimpleErrorPage {
     type Future = Finished<(TcpStream, Buf), Error>;
-    fn make_serializer(self, mut response: ResponseWriter)
+    fn into_serializer(self, mut response: ResponseWriter)
         -> Self::Future
     {
         let content_length = PART1.len() + PART2.len() + PART3.len() +
