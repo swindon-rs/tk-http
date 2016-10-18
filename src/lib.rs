@@ -4,7 +4,7 @@
 //!
 //! Simple Hello world example.
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! extern crate futures;
 //! extern crate minihttp;
 //! extern crate tokio_core;
@@ -24,7 +24,7 @@
 //!     type Future = Finished<minihttp::Response, io::Error>;
 //!
 //!     fn call(&self, req: minihttp::Request) -> Self::Future {
-//!         let resp = minihttp::Response::new();
+//!         let resp = req.new_response();
 //!         // resp.header("Content-Type", "text/plain");
 //!         // resp.body("Hello, World");
 //!         futures::finished(resp)
@@ -38,7 +38,7 @@
 //!
 //!     let addr = "0.0.0.0:8080".parse().unwrap();
 //!
-//!     minihttp::serve(&lp.handle(), addr, HelloWorld).unwrap();
+//!     minihttp::serve(&lp.handle(), addr, HelloWorld);
 //!     lp.run(futures::empty::<(), ()>()).unwrap();
 //! }
 //! ```

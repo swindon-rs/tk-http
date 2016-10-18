@@ -71,13 +71,6 @@ impl Request {
         Ok(Async::Ready((req, bytes)))
     }
 
-    // pub fn parse_body(&mut self, buf: &mut Buf) -> Poll<(), io::Error> {
-    //     if let Some(body_size) = self.content_length() {
-    //         println!("Must read {} bytes", body_size);
-    //     }
-    //     Ok(Async::Ready(()))
-    // }
-
     fn parse_headers(&mut self, parser: httparse::Request) {
         for h in parser.headers.iter() {
             let header = Header::from(h.name);

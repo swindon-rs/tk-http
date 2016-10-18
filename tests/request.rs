@@ -4,8 +4,6 @@ extern crate netbuf;
 extern crate minihttp;
 
 use std::str;
-use std::io;
-use std::io::{Read, Write};
 use futures::Async;
 use netbuf::Buf;
 
@@ -44,7 +42,7 @@ fn request() {
 
     let res = Request::parse_from(&buf).unwrap();
     assert!(res.is_ready());
-    if let Async::Ready((req, bytes)) = res {;
+    if let Async::Ready((req, _)) = res {;
         // assert_eq!(, futures::Async::Ready(()));
         assert_eq!(req.method, Method::Get);
         assert_eq!(req.path, "/path".to_string());
@@ -67,7 +65,7 @@ fn partial_request() {
     let res = Request::parse_from(&buf).unwrap();
     assert!(res.is_ready());
 
-    if let Async::Ready((req, bytes)) = res {;
+    if let Async::Ready((req, _)) = res {;
         assert_eq!(req.method, Method::Head);
         assert_eq!(req.path, "/path?with=query".to_string());
         assert_eq!(req.version, 1);
