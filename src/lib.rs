@@ -65,7 +65,6 @@ extern crate netbuf;
 
 
 pub mod request;
-pub mod response;
 pub mod server;
 pub mod enums;
 mod error;
@@ -84,7 +83,6 @@ use tokio_service::NewService;
 
 pub use enums::Version;
 pub use request::Request;
-pub use response::Response;
 pub use error::Error;
 pub use serve::{GenericResponse, ResponseWriter};
 pub use lambda::ResponseFn;

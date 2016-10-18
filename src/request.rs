@@ -7,7 +7,6 @@ use httparse;
 use netbuf::Buf;
 use futures::{Async, Poll};
 
-use super::response::Response;
 use super::enums::{Method, Header};
 use serve::ResponseConfig;
 use {Version};
@@ -91,9 +90,6 @@ impl Request {
 
     // Public interface
 
-    pub fn new_response(&self) -> Response {
-        Response::new(self.version)
-    }
     pub fn has_body(&self) -> bool {
         self.body.is_some()
     }
