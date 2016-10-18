@@ -1,34 +1,40 @@
 extern crate tokio_core;
 extern crate tokio_service;
 extern crate futures;
+extern crate netbuf;
 extern crate minihttp;
 #[macro_use] extern crate log;
 extern crate env_logger;
 
 use std::env;
-use std::io;
 
+use netbuf::Buf;
 use tokio_core::reactor::Core;
+use tokio_core::net::TcpStream;
 use tokio_service::Service;
-use futures::Async;
+use futures::{Async, Finished, finished};
 
+use minihttp::{ResponseFn, Error};
 use minihttp::request::Request;
-use minihttp::response::Response;
 
 #[derive(Clone)]
 struct HelloWorld;
 
 impl Service for HelloWorld {
     type Request = Request;
-    type Response = Response;
-    type Error = io::Error;
-    type Future = futures::Finished<Self::Response, Self::Error>;
+    type Response = ResponseFn<Finished<(TcpStream, Buf), Error>>;
+    type Error = Error;
+    type Future = Finished<Self::Response, Error>;
 
-    fn call(&self, req: Self::Request) -> Self::Future {
-        let mut resp = req.new_response();
-        resp.set_status(204)
-            .set_reason("No Content".to_string());
-        futures::finished(resp)
+    fn call(&self, _req: Self::Request) -> Self::Future {
+        finished(ResponseFn::new(move |mut res| {
+            res.status(200, "OK");
+            res.add_chunked().unwrap();
+            if res.done_headers().unwrap() {
+                res.write_body(b"Hello world!");
+            }
+            res.done()
+        }))
     }
 
     fn poll_ready(&self) -> Async<()> {

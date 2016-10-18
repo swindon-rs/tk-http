@@ -58,6 +58,7 @@ pub mod response;
 pub mod server;
 pub mod enums;
 mod error;
+mod lambda;
 mod simple_error_page;
 mod serve;
 mod base_serializer;
@@ -75,6 +76,7 @@ pub use request::Request;
 pub use response::Response;
 pub use error::Error;
 pub use serve::{GenericResponse, ResponseWriter};
+pub use lambda::ResponseFn;
 pub use simple_error_page::SimpleErrorPage;
 
 

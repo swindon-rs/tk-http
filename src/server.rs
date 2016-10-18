@@ -190,10 +190,11 @@ impl<T> HttpServer<T>
                 Some(&mut InFlight::Waiting(..)) => {}
                 _ => return Ok(()),
             };
-            let (sock, buf) = self.conn.take().expect("connection is owned");
             match self.in_flight.pop_front() {
                 Some(InFlight::Responding(_)) => continue,
                 Some(InFlight::Waiting(cfg, response)) => {
+                    let (sock, buf) = self.conn.take()
+                        .expect("connection is owned");
                     self.in_flight.push_front(InFlight::Responding(
                         response.make_serializer(ResponseWriter::new(sock, buf,
                             cfg.version, cfg.is_head, cfg.do_close))));
