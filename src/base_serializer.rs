@@ -397,6 +397,12 @@ impl Message {
             }
         }
     }
+    /// Returns true if headers are already sent (buffered)
+    pub fn is_after_headers(&self) -> bool {
+        use self::MessageState::*;
+        matches!(self.1, Bodyless | Done |
+            FixedBody {..} | ChunkedBody {..})
+    }
 
     /// Returns true if `done()` method is already called-
     pub fn is_complete(&self) -> bool {

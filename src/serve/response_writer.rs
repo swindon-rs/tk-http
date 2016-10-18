@@ -3,6 +3,7 @@ use std::io;
 use netbuf::Buf;
 use futures::{Finished, finished};
 use tokio_core::net::TcpStream;
+use tokio_core::io::{WriteAll, write_all};
 
 use base_serializer::{MessageState, Message, HeaderError};
 use version::Version;
@@ -207,6 +208,20 @@ impl ResponseWriter {
     pub fn done<E>(mut self) -> Finished<(TcpStream, Buf), E> {
         self.0.done();
         finished((self.1, (self.0).0))
+    }
+    /// Returns a future which yields a socket when the buffer is flushed to
+    /// the socket
+    ///
+    /// It yield only socket because there is no reason for holding empty
+    /// buffer. This is useful to implement `sendfile` or any other custom
+    /// way of sending data to the socket.
+    ///
+    /// # Panics
+    ///
+    /// Currently method panics when done_headers is not called yet
+    pub fn steal_socket(self) -> WriteAll<TcpStream, Buf> {
+        assert!(self.0.is_after_headers());
+        write_all(self.1, (self.0).0)
     }
 }
 

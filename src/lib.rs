@@ -76,7 +76,7 @@ pub use version::Version;
 pub use request::Request;
 pub use response::Response;
 pub use error::Error;
-pub use serve::{GenericResponse, ResponseConfig, ResponseWriter};
+pub use serve::{GenericResponse, ResponseWriter};
 pub use simple_error_page::SimpleErrorPage;
 
 
@@ -96,7 +96,8 @@ pub use simple_error_page::SimpleErrorPage;
 /// lp.run(futures::empty<(), ()>() ).unwrap();
 /// ```
 pub fn serve<S>(handle: &Handle, addr: SocketAddr, service: S)
-    where S: NewService<Request=Request, Response=Response, Error=server::HttpError> + 'static,
+    where S: NewService<Request=Request, Error=Error> + 'static,
+          S::Response: GenericResponse,
 {
     let listener = TcpListener::bind(&addr, handle).unwrap();
     let handle2 = handle.clone();

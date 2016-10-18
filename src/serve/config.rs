@@ -4,6 +4,7 @@ use {Version};
 /// in a correct manner
 ///
 /// This is ought to be used in serializer only
+#[derive(Debug, Clone, Copy)]
 pub struct ResponseConfig {
     /// Whether request is a HEAD request
     pub is_head: bool,

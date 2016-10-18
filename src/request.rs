@@ -7,10 +7,10 @@ use httparse;
 use netbuf::Buf;
 use futures::{Async, Poll};
 
-// use super::error::Error;
 use super::response::Response;
-
 use super::headers::{Method, Header};
+use serve::ResponseConfig;
+use {Version};
 
 
 const MAX_HEADERS: usize = 64;
@@ -25,7 +25,7 @@ type Slice = (usize, usize);
 pub struct Request {
     pub method: Method,
     pub path: String,
-    pub version: u8,
+    pub version: Version,
 
     pub headers: Vec<(Header, String)>,
 
@@ -58,7 +58,7 @@ impl Request {
         };
         let mut req = Request {
             method: Method::from(parser.method.unwrap()),
-            version: parser.version.unwrap(),
+            version: Version::from_httparse(parser.version.unwrap()),
             path: parser.path.unwrap().to_string(),
             headers: Vec::with_capacity(MAX_HEADERS),
             body: None,
@@ -94,12 +94,6 @@ impl Request {
             }
             self.headers.push((header, value));
         }
-    }
-
-    // Public interface
-
-    pub fn new_response(&self) -> Response {
-        Response::new(self.version)
     }
 
     pub fn has_body(&self) -> bool {
@@ -157,5 +151,13 @@ impl Body {
         // } else if Some(ctype) = request.content_type() {
         }
         Ok(Async::Ready(None))
+    }
+}
+
+pub fn response_config(req: &Request) -> ResponseConfig {
+    ResponseConfig {
+        version: req.version,
+        is_head: req.method == Method::Head,
+        do_close: true, // TODO(tailhook) close
     }
 }
