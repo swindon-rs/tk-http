@@ -1,4 +1,5 @@
 use std::io;
+use std::fmt::Display;
 
 use netbuf::Buf;
 use futures::{Finished, finished};
@@ -120,6 +121,18 @@ impl ResponseWriter {
     {
         self.0.add_header(name, value.as_ref())
     }
+
+    /// Same as `add_header` but allows value to be formatted directly into
+    /// the buffer
+    ///
+    /// Useful for dates and numeric headers, as well as some strongly typed
+    /// wrappers
+    pub fn format_header<D: Display>(&mut self, name: &str, value: D)
+        -> Result<(), HeaderError>
+    {
+        self.0.format_header(name, value)
+    }
+
     /// Add a content length to the message.
     ///
     /// The `Content-Length` header is written to the output buffer immediately.

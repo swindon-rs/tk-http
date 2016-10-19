@@ -1,6 +1,7 @@
 //! This contains common part of serializer between client and server
 //! implementation
 
+use std::fmt::Display;
 use std::io::Write;
 use std::ascii::AsciiExt;
 
@@ -190,6 +191,13 @@ impl Message {
         self.0.write_all(b"\r\n").unwrap();
     }
 
+    fn write_formatted<D: Display>(&mut self, name: &str, value: D) {
+        self.0.write_all(name.as_bytes()).unwrap();
+        self.0.write_all(b": ").unwrap();
+        write!(&mut self.0, "{}", value).unwrap();
+        self.0.write_all(b"\r\n").unwrap();
+    }
+
     /// Add a header to the message.
     ///
     /// Header is written into the output buffer immediately. And is sent
@@ -230,6 +238,32 @@ impl Message {
         }
     }
 
+    /// Same as `add_header` but allows value to be formatted directly into
+    /// the buffer
+    ///
+    /// Useful for dates and numeric headers, as well as some strongly typed
+    /// wrappers
+    pub fn format_header<D: Display>(&mut self, name: &str, value: D)
+        -> Result<(), HeaderError>
+    {
+        use self::MessageState::*;
+        use self::HeaderError::*;
+        if name.eq_ignore_ascii_case("Content-Length")
+            || name.eq_ignore_ascii_case("Transfer-Encoding") {
+            return Err(BodyLengthHeader)
+        }
+        match self.1 {
+            Headers { .. } | FixedHeaders { .. } | ChunkedHeaders { .. } => {
+                self.write_formatted(name, value);
+                Ok(())
+            }
+            ref state => {
+                panic!("Called add_header() method on a message in state {:?}",
+                       state)
+            }
+        }
+    }
+
     /// Add a content length to the message.
     ///
     /// The `Content-Length` header is written to the output buffer immediately.
@@ -249,8 +283,7 @@ impl Message {
             ChunkedHeaders { .. } => Err(ContentLengthAfterTransferEncoding),
             Headers { body: Denied, .. } => Err(RequireBodyless),
             Headers { body, close } => {
-                self.write_header("Content-Length",
-                                  &n.to_string().into_bytes()[..]);
+                self.write_formatted("Content-Length", n);
                 self.1 = FixedHeaders { is_head: body == Head,
                                         close: close,
                                         content_length: n };
