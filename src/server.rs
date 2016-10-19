@@ -10,6 +10,7 @@ use request::{Request, Body, response_config};
 use serve::{ResponseConfig, ResponseWriter};
 use {GenericResponse, Error};
 
+const MAX_IN_FLIGHT: usize = 32;
 
 enum InFlight<F, R>
     where F: Future<Item=R>,
@@ -45,9 +46,8 @@ impl<T> HttpServer<T>
             conn: Some((socket, Buf::new())),
             in_buf: Buf::new(),
             request: None,
-            // out_body: None,
             service: service,
-            in_flight: VecDeque::with_capacity(32),
+            in_flight: VecDeque::with_capacity(MAX_IN_FLIGHT),
             done: false,
         }
     }
@@ -86,6 +86,9 @@ impl<T> HttpServer<T>
 
     fn read_and_process(&mut self) -> Poll<(), Error> {
         loop {
+            if self.in_flight.len() == MAX_IN_FLIGHT {
+                return Ok(Async::NotReady)
+            }
             while !try!(self.parse_request()) {
                 match try!(self.read_in()) {
                     Async::Ready(0) => {
