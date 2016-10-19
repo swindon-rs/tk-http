@@ -88,7 +88,14 @@ impl<T> HttpServer<T>
     fn read_and_process(&mut self) -> Poll<(), Error> {
         loop {
             if self.in_flight.len() == MAX_IN_FLIGHT {
-                return Ok(Async::NotReady)
+                match try!(self.read_in()) {
+                    Async::Ready(0) => {
+                        self.done = true;
+                        return Ok(Async::Ready(()))
+                    },
+                    Async::Ready(_) => continue,
+                    Async::NotReady => return Ok(Async::NotReady),
+                }
             }
             while !try!(self.parse_request()) {
                 match try!(self.read_in()) {
