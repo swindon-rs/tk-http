@@ -1,5 +1,6 @@
 use std::io::{self, Write};
 use std::collections::VecDeque;
+use std::mem::swap;
 
 use futures::{Future, Poll, Async};
 use tokio_core::net::TcpStream;
@@ -154,10 +155,9 @@ impl<T> HttpServer<T>
         match try!(Body::parse_from(&req, &mut self.in_buf)) {
             Async::Ready(None) => Ok(true),
             Async::Ready(Some(size)) => {
-                let mut buf = Buf::new();
-                buf.extend(&self.in_buf[..size]);
-                self.in_buf.consume(size);
-                req.body = Some(Body::new(buf));
+                let mut body_buf = self.in_buf.split_off(size);
+                swap(&mut body_buf, &mut self.in_buf);
+                req.body = Some(Body::new(body_buf));
                 Ok(true)
             },
             Async::NotReady => Ok(false),
