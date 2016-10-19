@@ -62,6 +62,7 @@ extern crate tokio_service;
 extern crate netbuf;
 #[macro_use(quick_error)] extern crate quick_error;
 #[macro_use] extern crate matches;
+#[macro_use] extern crate log;
 
 
 pub mod request;
@@ -112,12 +113,12 @@ pub fn serve<S>(handle: &Handle, addr: SocketAddr, service: S)
     let handle2 = handle.clone();
 
     handle.spawn(listener.incoming().for_each(move |(stream, addr)| {
-        println!("Got incomming connection: {:?}, {:?}", stream, addr);
+        trace!("Got incomming connection: {:?}, {:?}", stream, addr);
         let handler = service.new_service().unwrap();
         handle2.spawn(
             server::HttpServer::new(stream, handler)
-            .map(|_| {println!("done"); })
-            .map_err(|err| { println!("Got Error: {:?}", err); }));
+            .map(|()| { trace!("Connection closed"); })
+            .map_err(|err| { debug!("Connection error: {:?}", err); }));
         Ok(())
     }).map_err(|e| {
         println!("Server error: {:?}", e)
