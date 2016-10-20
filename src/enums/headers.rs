@@ -71,3 +71,16 @@ impl<'a> From<&'a str> for Header {
         }
     }
 }
+
+impl PartialEq<str> for Header {
+    fn eq(&self, other: &str) -> bool {
+        use self::Header::*;
+        match *self {
+            Host => "Host".eq_ignore_ascii_case(other),
+            Connection => "Connection".eq_ignore_ascii_case(other),
+            KeepAlive => "Keep-Alive".eq_ignore_ascii_case(other),
+            ContentLength => "Content-Length".eq_ignore_ascii_case(other),
+            Raw(ref x) => x.eq_ignore_ascii_case(other),
+        }
+    }
+}
