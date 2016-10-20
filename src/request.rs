@@ -2,6 +2,7 @@ use std::io;
 use std::convert::From;
 use std::str;
 use std::str::FromStr;
+use std::ascii::AsciiExt;
 
 use httparse;
 use netbuf::Buf;
@@ -31,6 +32,7 @@ pub struct Request {
     pub body: Option<Body>,
 
     // some known headers
+    connection_close: bool,
     host: Option<usize>,
     content_type: Option<usize>,
     content_length: Option<usize>,
@@ -54,13 +56,15 @@ impl Request {
                 return Err(e.into());
             },
         };
+        let ver = Version::from_httparse(parser.version.unwrap());
         let mut req = Request {
             method: Method::from(parser.method.unwrap()),
-            version: Version::from_httparse(parser.version.unwrap()),
+            version: ver,
             path: parser.path.unwrap().to_string(),
             headers: Vec::with_capacity(MAX_HEADERS),
             body: None,
 
+            connection_close: ver != Version::Http11,
             host: None,
             content_type: None,
             content_length: None,
@@ -76,6 +80,13 @@ impl Request {
             match header {
                 Header::Host => {
                     self.host = Some(self.headers.len());
+                },
+                Header::Connection => {
+                    if value.split(',')
+                        .any(|token| token.eq_ignore_ascii_case("close"))
+                    {
+                        self.connection_close = true;
+                    }
                 },
                 Header::ContentLength => {
                     // check if value is usize:
@@ -154,6 +165,6 @@ pub fn response_config(req: &Request) -> ResponseConfig {
     ResponseConfig {
         version: req.version,
         is_head: req.method == Method::Head,
-        do_close: true, // TODO(tailhook) close
+        do_close: req.connection_close,
     }
 }

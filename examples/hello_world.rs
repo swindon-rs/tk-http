@@ -1,3 +1,4 @@
+extern crate time;
 extern crate tokio_core;
 extern crate tokio_service;
 extern crate futures;
@@ -33,6 +34,9 @@ impl Service for HelloWorld {
         finished(ResponseFn::new(move |mut res| {
             res.status(200, "OK");
             res.add_length(BODY.as_bytes().len() as u64).unwrap();
+            res.format_header("Date", time::now_utc().rfc822()).unwrap();
+            res.add_header("Server", concat!("minihttp/",
+                                     env!("CARGO_PKG_VERSION"))).unwrap();
             if res.done_headers().unwrap() {
                 res.write_body(BODY.as_bytes());
             }
