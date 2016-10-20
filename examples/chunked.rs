@@ -21,20 +21,19 @@ use minihttp::request::Request;
 #[derive(Clone)]
 struct HelloWorld;
 
-const BODY: &'static str = "Hello World!";
-
 impl Service for HelloWorld {
     type Request = Request;
     type Response = ResponseFn<Finished<IoBuf<TcpStream>, Error>, TcpStream>;
     type Error = Error;
     type Future = Finished<Self::Response, Error>;
 
-    fn call(&self, _req: Self::Request) -> Self::Future {
+    fn call(&self, req: Self::Request) -> Self::Future {
+        println!("{:?} {}", req.method, req.path);
         finished(ResponseFn::new(move |mut res| {
             res.status(200, "OK");
-            res.add_length(BODY.as_bytes().len() as u64).unwrap();
+            res.add_chunked().unwrap();
             if res.done_headers().unwrap() {
-                res.write_body(BODY.as_bytes());
+                res.write_body(b"Hello world!");
             }
             res.done()
         }))
