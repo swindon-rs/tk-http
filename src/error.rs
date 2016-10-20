@@ -14,7 +14,7 @@ quick_error! {
         }
         ParseError(err: httparse::Error) {
             description("parse error")
-            display("parse error: {}", err)
+            display("parse error: {:?}", err)
             from()
         }
     }

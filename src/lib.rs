@@ -56,7 +56,6 @@
 //! }
 //! ```
 
-extern crate bytes;
 extern crate futures;
 extern crate httparse;
 extern crate tokio_core;

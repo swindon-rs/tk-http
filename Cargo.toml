@@ -5,12 +5,11 @@ authors = ["Alexey Popravka <alexey.popravka@horsedevel.com>"]
 
 [dependencies]
 
-bytes = { git = "https://github.com/carllerche/bytes" }
 futures = "0.1.1"
-httparse = { git = "https://github.com/seanmonstar/httparse" } # "1.1.2"
+httparse = "1.1.2"
 tokio-core = "0.1.0"
 tokio-service = { git = "https://github.com/tokio-rs/tokio-service" }
-tk-bufstream = { git = "https://github.com/tailhook/tk-bufstream", rev = "11e57a5" }
+tk-bufstream = "0.1.0"
 netbuf = "0.3.5"
 quick-error = "1.1.0"
 matches = "0.1.3"

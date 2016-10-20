@@ -9,7 +9,7 @@ use futures::{Async, Poll};
 
 use super::enums::{Method, Header};
 use serve::ResponseConfig;
-use {Version};
+use {Version, Error};
 
 
 const MAX_HEADERS: usize = 64;
@@ -40,7 +40,7 @@ pub struct Request {
 
 impl Request {
 
-    pub fn parse_from(buf: &Buf) -> Poll<(Request,usize), io::Error> {
+    pub fn parse_from(buf: &Buf) -> Poll<(Request,usize), Error> {
         let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
         let mut parser = httparse::Request::new(&mut headers);
         let bytes = match parser.parse(&buf[..]) {
@@ -51,8 +51,7 @@ impl Request {
                 return Ok(Async::NotReady);
             },
             Err(e) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other, e.to_string()));
+                return Err(e.into());
             },
         };
         let mut req = Request {
