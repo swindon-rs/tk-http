@@ -242,13 +242,11 @@ impl RequestParser {
                     }
                 },
                 ParseState::FixedBody { size } => {
-                    debug!("Content-Length Body {} {}", size, buf.len());
                     if buf.len() >= size {
                         let mut req = self.1.take().unwrap();
                         let mut bbuf = buf.split_off(size);
                         mem::swap(&mut bbuf, buf);
                         req.body = Some(Body::new(bbuf));
-                        debug!("BODY: {}", req.body.is_some());
                         self.1 = Some(req);
                         self.0 = ParseState::Done;
                     } else {
@@ -256,7 +254,6 @@ impl RequestParser {
                     }
                 },
                 ParseState::ChunkedBody { mut next_chunk_offset } => {
-                    debug!("Chunked Body");
                     if next_chunk_offset > buf.len() {
                         break;
                     }
