@@ -17,7 +17,7 @@ fn request() {
 
     let res = Request::parse_from(&buf).unwrap();
     assert!(res.is_ready());
-    if let Async::Ready((req, _)) = res {;
+    if let Async::Ready((req, _, _)) = res {;
         // assert_eq!(, futures::Async::Ready(()));
         assert_eq!(req.method, Method::Get);
         assert_eq!(req.path, "/path".to_string());
@@ -40,11 +40,12 @@ fn partial_request() {
     let res = Request::parse_from(&buf).unwrap();
     assert!(res.is_ready());
 
-    if let Async::Ready((req, _)) = res {;
+    if let Async::Ready((req, size, _)) = res {;
         assert_eq!(req.method, Method::Head);
         assert_eq!(req.path, "/path?with=query".to_string());
         assert_eq!(req.version, Version::Http11);
 
         assert_eq!(req.host().unwrap(), "www.example.com");
+        assert_eq!(size, buf.len());
     }
 }

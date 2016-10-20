@@ -17,5 +17,9 @@ quick_error! {
             display("parse error: {:?}", err)
             from()
         }
+        ChunkParseError(err: httparse::InvalidChunkSize) {
+            description("chunk size parse error")
+            from()
+        }
     }
 }

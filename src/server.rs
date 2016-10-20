@@ -1,13 +1,12 @@
 use std::collections::VecDeque;
-use std::mem;
 
 use tk_bufstream::IoBuf;
 use futures::{Future, Poll, Async};
-use futures::Async::{Ready};
+//use futures::Async::{Ready};
 use tokio_core::io::Io;
 use tokio_service::Service;
 
-use request::{Request, Body, response_config};
+use request::{Request, RequestParser, response_config};
 use serve::{ResponseConfig, ResponseWriter};
 use {GenericResponse, Error};
 
@@ -30,7 +29,7 @@ pub struct HttpServer<T, S>
     /// Socket and output buffer, it's None when connection is borrowed by
     ///
     conn: Option<IoBuf<S>>,
-    partial_request: Option<Request>,
+    request_parser: RequestParser,
     service: T,
     in_flight: VecDeque<InFlight<T::Future, T::Response, S>>,
 }
@@ -44,7 +43,7 @@ impl<T, S> HttpServer<T, S>
     pub fn new(socket: S, service: T) -> HttpServer<T, S> {
         HttpServer {
             conn: Some(IoBuf::new(socket)),
-            partial_request: None,
+            request_parser: RequestParser::new(),
             service: service,
             in_flight: VecDeque::with_capacity(32),
         }
@@ -53,44 +52,12 @@ impl<T, S> HttpServer<T, S>
     fn read_and_process(&mut self) -> Result<(), Error> {
         if let Some(ref mut conn) = self.conn {
             loop {
-                while self.partial_request.is_none() {
-                    if let Ready((req, size)) = try!(
-                        Request::parse_from(&conn.in_buf))
-                    {
-                        conn.in_buf.consume(size);
-                        self.partial_request = Some(req);
-                    } else {
-                        if try!(conn.read()) == 0 {
-                            return Ok(());
-                        }
+                while !try!(self.request_parser.parse_from(&mut conn.in_buf)) {
+                    if try!(conn.read()) == 0 {
+                        return Ok(());
                     }
                 }
-                let mut req = self.partial_request.take().unwrap();
-                loop {
-                    // TODO(tailhook) Note this only accounts fixed-length
-                    // body, not chunked encoding
-                    if let Ready(b) = try!(
-                        Body::parse_from(&req, &mut conn.in_buf))
-                    {
-                        match b {
-                            Some(size) => {
-                                let tail = conn.in_buf.split_off(size);
-                                let bbuf = mem::replace(&mut conn.in_buf, tail);
-                                req.body = Some(Body::new(bbuf));
-                                break;
-                            }
-                            None => {
-                                // TODO(tailhook) None means 0 acutually
-                                break;
-                            }
-                        }
-                    } else {
-                        if try!(conn.read()) == 0 {
-                            self.partial_request = Some(req);
-                            return Ok(());
-                        }
-                    }
-                }
+                let req = self.request_parser.take().unwrap();
                 let cfg = response_config(&req);
                 let waiter = self.service.call(req);
                 self.in_flight.push_back((InFlight::Service(cfg, waiter)));
