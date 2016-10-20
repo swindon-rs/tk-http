@@ -1,21 +1,20 @@
-use std::io::{self, Write};
 use std::collections::VecDeque;
-use std::mem::swap;
+use std::mem;
 
+use tk_bufstream::IoBuf;
 use futures::{Future, Poll, Async};
-use tokio_core::net::TcpStream;
+use futures::Async::{Ready};
+use tokio_core::io::Io;
 use tokio_service::Service;
-use netbuf::Buf;
 
 use request::{Request, Body, response_config};
 use serve::{ResponseConfig, ResponseWriter};
 use {GenericResponse, Error};
 
-const MAX_IN_FLIGHT: usize = 32;
 
-enum InFlight<F, R>
+enum InFlight<F, R, S: Io>
     where F: Future<Item=R>,
-          R: GenericResponse,
+          R: GenericResponse<S>,
 {
     Service(ResponseConfig, F),
     Waiting(ResponseConfig, R),
@@ -23,152 +22,81 @@ enum InFlight<F, R>
 }
 
 
-pub struct HttpServer<T>
+pub struct HttpServer<T, S>
     where T: Service<Request=Request, Error=Error>,
-          T::Response: GenericResponse,
+          T::Response: GenericResponse<S>,
+          S: Io,
 {
     /// Socket and output buffer, it's None when connection is borrowed by
     ///
-    conn: Option<(TcpStream, Buf)>,
-    in_buf: Buf,
-    request: Option<Request>,
+    conn: Option<IoBuf<S>>,
+    partial_request: Option<Request>,
     service: T,
-    in_flight: VecDeque<InFlight<T::Future, T::Response>>,
-    done: bool,
+    in_flight: VecDeque<InFlight<T::Future, T::Response, S>>,
 }
 
-impl<T> HttpServer<T>
+impl<T, S> HttpServer<T, S>
     where T: Service<Request=Request, Error=Error>,
-          T::Response: GenericResponse,
+          T::Response: GenericResponse<S>,
+          S: Io
 {
 
-    pub fn new(socket: TcpStream, service: T) -> HttpServer<T> {
+    pub fn new(socket: S, service: T) -> HttpServer<T, S> {
         HttpServer {
-            conn: Some((socket, Buf::new())),
-            in_buf: Buf::new(),
-            request: None,
+            conn: Some(IoBuf::new(socket)),
+            partial_request: None,
             service: service,
-            in_flight: VecDeque::with_capacity(MAX_IN_FLIGHT),
-            done: false,
+            in_flight: VecDeque::with_capacity(32),
         }
     }
 
-    fn is_done(&self) -> bool {
-        self.done
-    }
-
-    fn flush(&mut self) -> Poll<(), Error> {
-        if let Some((ref mut sock, ref mut buf)) = self.conn {
+    fn read_and_process(&mut self) -> Result<(), Error> {
+        if let Some(ref mut conn) = self.conn {
             loop {
-                match buf.write_to(sock) {
-                    Ok(_) => break,
-                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock
-                    => {
-                        break;
+                while self.partial_request.is_none() {
+                    if let Ready((req, size)) = try!(
+                        Request::parse_from(&conn.in_buf))
+                    {
+                        conn.in_buf.consume(size);
+                        self.partial_request = Some(req);
+                    } else {
+                        if try!(conn.read()) == 0 {
+                            return Ok(());
+                        }
                     }
-                    Err(e) => {
-                        return Err(e.into());
-                    },
                 }
-            }
-            match sock.flush() {
-                Ok(_) => {
-                    Ok(Async::Ready(()))
-                },
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    Ok(Async::NotReady)
-                },
-                Err(e) => Err(e.into()),
-            }
-        } else {
-            Ok(Async::Ready(()))
-        }
-    }
-
-    fn read_and_process(&mut self) -> Poll<(), Error> {
-        loop {
-            if self.in_flight.len() == MAX_IN_FLIGHT {
-                match try!(self.read_in()) {
-                    Async::Ready(0) => {
-                        self.done = true;
-                        return Ok(Async::Ready(()))
-                    },
-                    Async::Ready(_) => continue,
-                    Async::NotReady => return Ok(Async::NotReady),
+                let mut req = self.partial_request.take().unwrap();
+                loop {
+                    // TODO(tailhook) Note this only accounts fixed-length
+                    // body, not chunked encoding
+                    if let Ready(b) = try!(
+                        Body::parse_from(&req, &mut conn.in_buf))
+                    {
+                        match b {
+                            Some(size) => {
+                                let tail = conn.in_buf.split_off(size);
+                                let bbuf = mem::replace(&mut conn.in_buf, tail);
+                                req.body = Some(Body::new(bbuf));
+                                break;
+                            }
+                            None => {
+                                // TODO(tailhook) None means 0 acutually
+                                break;
+                            }
+                        }
+                    } else {
+                        if try!(conn.read()) == 0 {
+                            self.partial_request = Some(req);
+                            return Ok(());
+                        }
+                    }
                 }
-            }
-            while !try!(self.parse_request()) {
-                match try!(self.read_in()) {
-                    Async::Ready(0) => {
-                        self.done = true;
-                        return Ok(Async::Ready(()))
-                    },
-                    Async::Ready(_) => {},
-                    Async::NotReady => return Ok(Async::NotReady),
-                }
-            }
-            while !try!(self.parse_body()) {
-                match try!(self.read_in()) {
-                    Async::Ready(0) => {
-                        self.done = true;
-                        return Ok(Async::Ready(()))
-                    },
-                    Async::Ready(_) => {},
-                    Async::NotReady => return Ok(Async::NotReady),
-                }
-            }
-            let req = self.request.take().unwrap();
-            let cfg = response_config(&req);
-            let waiter = self.service.call(req);
-            self.in_flight.push_back((InFlight::Service(cfg, waiter)));
-        }
-    }
-
-    fn read_in(&mut self) -> Poll<usize, io::Error> {
-        if let Some((ref mut sock, _)) = self.conn {
-            match self.in_buf.read_from(sock) {
-                Ok(size) => {
-                    return Ok(Async::Ready(size));
-                },
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    return Ok(Async::NotReady)
-                },
-                Err(e) => return Err(e),
-            }
-        } else {
-            Ok(Async::NotReady)
-        }
-    }
-
-    fn parse_request(&mut self) -> Result<bool, io::Error> {
-        if self.request.is_none() {
-            match try!(Request::parse_from(&self.in_buf)) {
-                Async::NotReady => return Ok(false),
-                Async::Ready((req, size)) => {
-                    self.in_buf.consume(size);
-                    self.request = Some(req);
-                },
+                let cfg = response_config(&req);
+                let waiter = self.service.call(req);
+                self.in_flight.push_back((InFlight::Service(cfg, waiter)));
             }
         }
-        Ok(true)
-    }
-
-    fn parse_body(&mut self) -> Result<bool, io::Error> {
-        assert!(self.request.is_some());
-        if self.request.as_ref().unwrap().body.is_some() {
-            return Ok(true)
-        }
-        let mut req = self.request.as_mut().unwrap();
-        match try!(Body::parse_from(&req, &mut self.in_buf)) {
-            Async::Ready(None) => Ok(true),
-            Async::Ready(Some(size)) => {
-                let mut body_buf = self.in_buf.split_off(size);
-                swap(&mut body_buf, &mut self.in_buf);
-                req.body = Some(Body::new(body_buf));
-                Ok(true)
-            },
-            Async::NotReady => Ok(false),
-        }
+        Ok(())
     }
 
     fn poll_waiters(&mut self) -> Result<(), Error> {
@@ -191,8 +119,8 @@ impl<T> HttpServer<T>
             match self.in_flight.front_mut() {
                 Some(&mut InFlight::Responding(ref mut fut)) => {
                     match try!(fut.poll()) {
-                        Async::Ready((sock, buf)) => {
-                            self.conn = Some((sock, buf));
+                        Async::Ready(conn) => {
+                            self.conn = Some(conn);
                         }
                         Async::NotReady => return Ok(()),
                     }
@@ -203,10 +131,9 @@ impl<T> HttpServer<T>
             match self.in_flight.pop_front() {
                 Some(InFlight::Responding(_)) => continue,
                 Some(InFlight::Waiting(cfg, response)) => {
-                    let (sock, buf) = self.conn.take()
-                        .expect("connection is owned");
+                    let conn = self.conn.take().expect("connection is owned");
                     self.in_flight.push_front(InFlight::Responding(
-                        response.into_serializer(ResponseWriter::new(sock, buf,
+                        response.into_serializer(ResponseWriter::new(conn,
                             cfg.version, cfg.is_head, cfg.do_close))));
                 }
                 _ => unreachable!(),
@@ -215,24 +142,27 @@ impl<T> HttpServer<T>
     }
 }
 
-impl<T> Future for HttpServer<T>
+impl<T, S> Future for HttpServer<T, S>
     where T: Service<Request=Request, Error=Error>,
-          T::Response: GenericResponse,
+          T::Response: GenericResponse<S>,
+          S: Io,
 {
     type Item = ();
     type Error = Error;
 
     fn poll(&mut self) -> Poll<(), Error> {
-        try!(self.flush());
-
+        if let Some(ref mut conn) = self.conn {
+            try!(conn.flush());
+        }
         try!(self.read_and_process());
 
         try!(self.poll_waiters());
 
-        try!(self.flush());
-
-        if self.is_done() {
-            return Ok(Async::Ready(()));
+        if let Some(ref mut conn) = self.conn {
+            try!(conn.flush());
+            if conn.done() {
+                return Ok(Async::Ready(()));
+            }
         }
         Ok(Async::NotReady)
     }

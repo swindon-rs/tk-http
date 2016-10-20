@@ -144,6 +144,9 @@ impl Body {
             }
         // } else if Some(ctype) = request.content_type() {
         }
+        // TODO(tailhook) if there is no content_length, we chould check
+        // transfer encoding, method and otherwise fail, instead of just
+        // blindly assuming body is empty
         Ok(Async::Ready(None))
     }
 }

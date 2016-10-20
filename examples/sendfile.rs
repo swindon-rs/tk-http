@@ -1,10 +1,12 @@
 extern crate tokio_core;
 extern crate tokio_service;
 extern crate futures;
+extern crate futures_cpupool;
 extern crate netbuf;
 extern crate argparse;
 extern crate minihttp;
 extern crate tk_sendfile;
+extern crate tk_bufstream;
 #[macro_use] extern crate log;
 extern crate env_logger;
 
@@ -12,12 +14,13 @@ use std::env;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use netbuf::Buf;
 use argparse::{ArgumentParser, Parse};
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpStream;
 use tokio_service::Service;
 use futures::{Async, BoxFuture, Future};
+use futures_cpupool::CpuPool;
+use tk_bufstream::IoBuf;
 use tk_sendfile::DiskPool;
 
 use minihttp::request::Request;
@@ -31,9 +34,9 @@ struct HelloWorld {
 
 struct Response(DiskPool, PathBuf);
 
-impl GenericResponse for Response {
-    type Future = BoxFuture<(TcpStream, Buf), Error>;
-    fn into_serializer(self, mut response: ResponseWriter)
+impl GenericResponse<TcpStream> for Response {
+    type Future = BoxFuture<IoBuf<TcpStream>, Error>;
+    fn into_serializer(self, mut response: ResponseWriter<TcpStream>)
         -> Self::Future
     {
         self.0.open(self.1)
@@ -42,9 +45,7 @@ impl GenericResponse for Response {
             response.add_length(file.size()).unwrap();
             if response.done_headers().unwrap() {
                 response.steal_socket()
-                .and_then(|(socket, buf)| {
-                    file.write_into(socket).map(|sock| (sock, buf))
-                })
+                .and_then(|stream| file.write_into(stream))
             } else {
                 // Don't send any body
                 unimplemented!();
@@ -89,7 +90,7 @@ fn main() {
     }
     env_logger::init().expect("init logging");
 
-    let disk_pool = DiskPool::new();
+    let disk_pool = DiskPool::new(CpuPool::new(40));
 
     let mut lp = Core::new().unwrap();
 

@@ -1,10 +1,12 @@
 use std::io;
+use std::mem;
 use std::fmt::Display;
 
 use netbuf::Buf;
 use futures::{Finished, finished};
-use tokio_core::net::TcpStream;
-use tokio_core::io::{WriteAll, write_all};
+use tk_bufstream::IoBuf;
+use tokio_core::io::Io;
+use tk_bufstream::Flushed;
 
 use base_serializer::{MessageState, Message, HeaderError};
 use enums::Version;
@@ -28,18 +30,23 @@ pub const NOT_IMPLEMENTED_HEAD: &'static str = concat!(
     "\r\n",
     );
 
-pub struct ResponseWriter(Message, TcpStream);
+pub struct ResponseWriter<S: Io>(Message, IoBuf<S>);
 
 // TODO: Support responses to CONNECT and `Upgrade: websocket` requests.
-impl ResponseWriter {
+impl<S: Io> ResponseWriter<S> {
     /// Creates new response message by extracting needed fields from Head.
-    pub fn new(sock: TcpStream, out_buf: Buf, version: Version,
-        is_head: bool, do_close: bool) -> ResponseWriter
+    pub fn new(mut sock: IoBuf<S>, version: Version,
+        is_head: bool, do_close: bool) -> ResponseWriter<S>
     {
         use base_serializer::Body::*;
+
+        // TODO(tailhook) while the following is very cheap in CPU usage,
+        // it costs useless 24 bytes of a closure size, might be optimized.
+        let buf = mem::replace(&mut sock.out_buf, Buf::new());
+
         // TODO(tailhook) implement Connection: Close,
         // (including explicit one in HTTP/1.0) and maybe others
-        ResponseWriter(Message(out_buf, MessageState::ResponseStart {
+        ResponseWriter(Message(buf, MessageState::ResponseStart {
             body: if is_head { Head } else { Normal },
             version: version,
             close: do_close || version == Version::Http10,
@@ -218,9 +225,11 @@ impl ResponseWriter {
     /// # Panics
     ///
     /// When the response is in the wrong state.
-    pub fn done<E>(mut self) -> Finished<(TcpStream, Buf), E> {
+    pub fn done<E>(mut self) -> Finished<IoBuf<S>, E> {
         self.0.done();
-        finished((self.1, (self.0).0))
+        debug_assert!(self.1.out_buf.len() == 0);
+        self.1.out_buf = (self.0).0;
+        finished(self.1)
     }
     /// Returns a future which yields a socket when the buffer is flushed to
     /// the socket
@@ -232,13 +241,16 @@ impl ResponseWriter {
     /// # Panics
     ///
     /// Currently method panics when done_headers is not called yet
-    pub fn steal_socket(self) -> WriteAll<TcpStream, Buf> {
+    pub fn steal_socket(mut self) -> Flushed<S> {
         assert!(self.0.is_after_headers());
-        write_all(self.1, (self.0).0)
+
+        debug_assert!(self.1.out_buf.len() == 0);
+        self.1.out_buf = (self.0).0;
+        self.1.flushed()
     }
 }
 
-impl io::Write for ResponseWriter {
+impl<S: Io> io::Write for ResponseWriter<S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         // TODO(tailhook) we might want to propatage error correctly
         // rather than panic

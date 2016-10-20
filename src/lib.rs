@@ -9,9 +9,10 @@
 //! extern crate minihttp;
 //! extern crate netbuf;
 //! extern crate tokio_core;
+//! extern crate tk_bufstream;
 //! extern crate tokio_service;
 //! use std::io;
-//! use netbuf::Buf;
+//! use tk_bufstream::IoBuf;
 //! use tokio_service::{Service, NewService};
 //! use tokio_core::reactor::Core;
 //! use tokio_core::net::TcpStream;
@@ -23,7 +24,8 @@
 //!
 //! impl Service for HelloWorld {
 //!    type Request = Request;
-//!    type Response = ResponseFn<Finished<(TcpStream, Buf), Error>>;
+//!    type Response = ResponseFn<Finished<IoBuf<TcpStream>, Error>,
+//!                               TcpStream>;
 //!    type Error = Error;
 //!    type Future = Finished<Self::Response, Error>;
 //!
@@ -60,6 +62,7 @@ extern crate httparse;
 extern crate tokio_core;
 extern crate tokio_service;
 extern crate netbuf;
+extern crate tk_bufstream;
 #[macro_use(quick_error)] extern crate quick_error;
 #[macro_use] extern crate matches;
 #[macro_use] extern crate log;
@@ -79,7 +82,7 @@ use std::net::SocketAddr;
 use futures::Future;
 use futures::stream::{Stream};
 use tokio_core::reactor::Handle;
-use tokio_core::net::TcpListener;
+use tokio_core::net::{TcpListener, TcpStream};
 use tokio_service::NewService;
 
 pub use enums::Version;
@@ -105,9 +108,9 @@ pub use simple_error_page::SimpleErrorPage;
 ///
 /// lp.run(futures::empty<(), ()>() ).unwrap();
 /// ```
-pub fn serve<S>(handle: &Handle, addr: SocketAddr, service: S)
-    where S: NewService<Request=Request, Error=Error> + 'static,
-          S::Response: GenericResponse,
+pub fn serve<T>(handle: &Handle, addr: SocketAddr, service: T)
+    where T: NewService<Request=Request, Error=Error> + 'static,
+          T::Response: GenericResponse<TcpStream>,
 {
     let listener = TcpListener::bind(&addr, handle).unwrap();
     let handle2 = handle.clone();

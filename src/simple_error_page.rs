@@ -1,8 +1,8 @@
 use std::io::Write;
 
-use netbuf::Buf;
 use futures::Finished;
-use tokio_core::net::TcpStream;
+use tk_bufstream::IoBuf;
+use tokio_core::io::Io;
 
 use serve::GenericResponse;
 use {Error, ResponseWriter};
@@ -35,9 +35,9 @@ const PART3: &'static str = concat!("\
 // TODO(tailhook) use response code enum and it's owned reason string
 pub struct SimpleErrorPage(u16, &'static str);
 
-impl GenericResponse for SimpleErrorPage {
-    type Future = Finished<(TcpStream, Buf), Error>;
-    fn into_serializer(self, mut response: ResponseWriter)
+impl<S: Io> GenericResponse<S> for SimpleErrorPage {
+    type Future = Finished<IoBuf<S>, Error>;
+    fn into_serializer(self, mut response: ResponseWriter<S>)
         -> Self::Future
     {
         let content_length = PART1.len() + PART2.len() + PART3.len() +
@@ -53,5 +53,11 @@ impl GenericResponse for SimpleErrorPage {
                 .expect("writing to a buffer always succeeds");
         }
         response.done()
+    }
+}
+
+impl SimpleErrorPage {
+    pub fn new(code: u16, reason: &'static str) -> SimpleErrorPage {
+        SimpleErrorPage(code, reason)
     }
 }

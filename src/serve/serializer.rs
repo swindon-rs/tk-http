@@ -1,8 +1,9 @@
 use futures::Future;
-use netbuf::Buf;
+use tk_bufstream::IoBuf;
+use tokio_core::io::Io;
+
 use {Error, ResponseWriter};
 
-use tokio_core::net::TcpStream;
 
 /// A response object
 ///
@@ -12,14 +13,14 @@ use tokio_core::net::TcpStream;
 /// * Use `sendfile` syscall
 /// * Stream request from source, etc.
 ///
-pub trait GenericResponse {
+pub trait GenericResponse<S: Io> {
 
     /// Actual serializer type
     ///
     /// Should return back TcpSocket and buffer when finished. There is no
     /// obligation that buffer is flushed when finished, we will take care of
     /// flushing
-    type Future: Future<Item=(TcpStream, Buf), Error=Error>;
+    type Future: Future<Item=IoBuf<S>, Error=Error>;
 
     /// Create a serializer object
     ///
@@ -29,6 +30,6 @@ pub trait GenericResponse {
     ///
     /// When serializer is going to write to the socket directly it's required
     /// to flush the data from the buffer into the socket first.
-    fn into_serializer(self, writer: ResponseWriter)
+    fn into_serializer(self, writer: ResponseWriter<S>)
         -> Self::Future;
 }

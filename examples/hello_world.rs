@@ -1,6 +1,7 @@
 extern crate tokio_core;
 extern crate tokio_service;
 extern crate futures;
+extern crate tk_bufstream;
 extern crate netbuf;
 extern crate minihttp;
 #[macro_use] extern crate log;
@@ -8,10 +9,10 @@ extern crate env_logger;
 
 use std::env;
 
-use netbuf::Buf;
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpStream;
 use tokio_service::Service;
+use tk_bufstream::IoBuf;
 use futures::{Async, Finished, finished};
 
 use minihttp::{ResponseFn, Error};
@@ -22,11 +23,12 @@ struct HelloWorld;
 
 impl Service for HelloWorld {
     type Request = Request;
-    type Response = ResponseFn<Finished<(TcpStream, Buf), Error>>;
+    type Response = ResponseFn<Finished<IoBuf<TcpStream>, Error>, TcpStream>;
     type Error = Error;
     type Future = Finished<Self::Response, Error>;
 
-    fn call(&self, _req: Self::Request) -> Self::Future {
+    fn call(&self, req: Self::Request) -> Self::Future {
+        println!("{:?} {}", req.method, req.path);
         finished(ResponseFn::new(move |mut res| {
             res.status(200, "OK");
             res.add_chunked().unwrap();
