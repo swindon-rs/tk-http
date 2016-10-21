@@ -51,6 +51,7 @@ pub enum Header {
     Connection,
     KeepAlive,
     ContentLength,
+    TransferEncoding,
     // add some more
     Raw(String),
 }
@@ -66,6 +67,8 @@ impl<'a> From<&'a str> for Header {
             Header::KeepAlive
         } else if val.eq_ignore_ascii_case("Content-Length") {
             Header::ContentLength
+        } else if val.eq_ignore_ascii_case("Transfer-Encoding") {
+            Header::TransferEncoding
         } else {
             Header::Raw(val.to_string())
         }
@@ -80,6 +83,7 @@ impl PartialEq<str> for Header {
             Connection => "Connection".eq_ignore_ascii_case(other),
             KeepAlive => "Keep-Alive".eq_ignore_ascii_case(other),
             ContentLength => "Content-Length".eq_ignore_ascii_case(other),
+            TransferEncoding => "Transfer-Encoding".eq_ignore_ascii_case(other),
             Raw(ref x) => x.eq_ignore_ascii_case(other),
         }
     }
