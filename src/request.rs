@@ -31,6 +31,8 @@ pub struct Request {
 
     // some known headers
     connection_close: bool,
+    // TODO: get rid of this crap;
+    //      must implement proper Headers structure.
     host: Option<usize>,
     content_type: Option<usize>,
     content_length: Option<usize>,
@@ -77,6 +79,10 @@ impl Request {
         // TODO(tailhook) if there is no content_length, we chould check
         // transfer encoding, method and otherwise fail, instead of just
         // blindly assuming body is empty
+
+        // TODO(popravich) revise body detection
+        // see  http://httpwg.github.io/specs/rfc7230.html#message.body.length
+        //      rotor-http/parser.rs#L86-L120
         let mut body_kind = BodyKind::WithoutBody;
 
         for h in parser.headers.iter() {
@@ -96,7 +102,7 @@ impl Request {
                 Header::ContentLength => {
                     // check if value is usize:
                     self.content_length = Some(self.headers.len());
-                    match usize::from_str(value.as_str()) {
+                    match value.parse::<usize>() {
                         Ok(size) => {
                             if body_kind != BodyKind::Chunked {
                                 body_kind = BodyKind::Fixed(size);
@@ -107,8 +113,11 @@ impl Request {
                 },
                 Header::TransferEncoding => {
                     self.transfer_encoding = Some(self.headers.len());
-                    match value.split(|c| c == ',').last() {
+                    match value.split(|c| c == ',').last().map(|c| c.trim()) {
                         Some("chunked") => {
+                            if let BodyKind::Fixed(_) = body_kind {
+                                self.connection_close = true;
+                            }
                             body_kind = BodyKind::Chunked;
                         }
                         _ => {},

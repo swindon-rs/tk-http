@@ -83,6 +83,7 @@ impl PartialEq<str> for Header {
             Connection => "Connection".eq_ignore_ascii_case(other),
             KeepAlive => "Keep-Alive".eq_ignore_ascii_case(other),
             ContentLength => "Content-Length".eq_ignore_ascii_case(other),
+            TransferEncoding => "Transfer-Encoding".eq_ignore_ascii_case(other),
             Raw(ref x) => x.eq_ignore_ascii_case(other),
         }
     }
