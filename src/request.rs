@@ -13,7 +13,10 @@ use serve::ResponseConfig;
 use {Version, Error};
 
 
-const MAX_HEADERS: usize = 64;
+/// Number of headers to allocate on stack
+const MIN_HEADERS: usize = 16;
+/// A hard limit on the number of headers
+const MAX_HEADERS: usize = 1024;
 
 
 /// Request struct.
@@ -44,9 +47,16 @@ pub struct Request {
 impl Request {
 
     pub fn parse_from(buf: &Buf) -> Poll<(Request,usize,BodyKind), Error> {
-        let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
+        let mut headers = [httparse::EMPTY_HEADER; MIN_HEADERS];
+        let mut vec;
         let mut parser = httparse::Request::new(&mut headers);
-        let bytes = match parser.parse(&buf[..]) {
+        let mut result = parser.parse(&buf[..]);
+        if matches!(result, Err(httparse::Error::TooManyHeaders)) {
+            vec = vec![httparse::EMPTY_HEADER; MAX_HEADERS];
+            parser = httparse::Request::new(&mut vec);
+            result = parser.parse(&buf[..]);
+        }
+        let bytes = match result {
             Ok(httparse::Status::Complete(bytes)) => {
                 bytes
             },
