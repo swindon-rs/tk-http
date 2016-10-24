@@ -18,6 +18,12 @@ quick_error! {
         DuplicateTransferEncoding {
             description("Transfer-Encoding is added twice")
         }
+        InvalidHeaderName {
+            description("Header name contains invalid characters")
+        }
+        InvalidHeaderValue {
+            description("Header value contains invalid characters")
+        }
         TransferEncodingAfterContentLength {
             description("Transfer encoding added when Content-Length is \
                 already specified")
@@ -90,6 +96,10 @@ pub enum Body {
 /// Specific wrappers are exposed in `server` and `client` modules.
 /// This type is private for the crate.
 pub struct Message(pub Buf, pub MessageState);
+
+fn invalid_header(value: &[u8]) -> bool {
+    return value.iter().any(|&x| x == b'\r' || x == b'\n')
+}
 
 impl Message {
     /// Write status line.
@@ -184,18 +194,46 @@ impl Message {
         }
     }
 
-    fn write_header(&mut self, name: &str, value: &[u8]) {
+    fn write_header(&mut self, name: &str, value: &[u8])
+        -> Result<(), HeaderError>
+    {
+        if invalid_header(name.as_bytes()) {
+            return Err(HeaderError::InvalidHeaderName);
+        }
+        let start = self.0.len();
         self.0.write_all(name.as_bytes()).unwrap();
         self.0.write_all(b": ").unwrap();
+
+        let value_start = self.0.len();
         self.0.write_all(value).unwrap();
+        if invalid_header(&self.0[value_start..]) {
+            self.0.remove_range(start..);
+            return Err(HeaderError::InvalidHeaderValue);
+        }
+
         self.0.write_all(b"\r\n").unwrap();
+        Ok(())
     }
 
-    fn write_formatted<D: Display>(&mut self, name: &str, value: D) {
+    fn write_formatted<D: Display>(&mut self, name: &str, value: D)
+        -> Result<(), HeaderError>
+    {
+        if invalid_header(name.as_bytes()) {
+            return Err(HeaderError::InvalidHeaderName);
+        }
+        let start = self.0.len();
         self.0.write_all(name.as_bytes()).unwrap();
         self.0.write_all(b": ").unwrap();
+
+        let value_start = self.0.len();
         write!(&mut self.0, "{}", value).unwrap();
+        if invalid_header(&self.0[value_start..]) {
+            self.0.remove_range(start..);
+            return Err(HeaderError::InvalidHeaderValue);
+        }
+
         self.0.write_all(b"\r\n").unwrap();
+        Ok(())
     }
 
     /// Add a header to the message.
@@ -228,7 +266,7 @@ impl Message {
         }
         match self.1 {
             Headers { .. } | FixedHeaders { .. } | ChunkedHeaders { .. } => {
-                self.write_header(name, value);
+                try!(self.write_header(name, value));
                 Ok(())
             }
             ref state => {
@@ -254,7 +292,7 @@ impl Message {
         }
         match self.1 {
             Headers { .. } | FixedHeaders { .. } | ChunkedHeaders { .. } => {
-                self.write_formatted(name, value);
+                try!(self.write_formatted(name, value));
                 Ok(())
             }
             ref state => {
@@ -283,7 +321,7 @@ impl Message {
             ChunkedHeaders { .. } => Err(ContentLengthAfterTransferEncoding),
             Headers { body: Denied, .. } => Err(RequireBodyless),
             Headers { body, close } => {
-                self.write_formatted("Content-Length", n);
+                try!(self.write_formatted("Content-Length", n));
                 self.1 = FixedHeaders { is_head: body == Head,
                                         close: close,
                                         content_length: n };
@@ -315,7 +353,7 @@ impl Message {
                 ChunkedHeaders { .. } => Err(DuplicateTransferEncoding),
                 Headers { body: Denied, .. } => Err(RequireBodyless),
                 Headers { body, close } => {
-                    self.write_header("Transfer-Encoding", b"chunked");
+                    try!(self.write_header("Transfer-Encoding", b"chunked"));
                     self.1 = ChunkedHeaders { is_head: body == Head,
                                               close: close };
                     Ok(())
