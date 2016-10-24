@@ -174,4 +174,61 @@ impl Status {
             _ => true,
         }
     }
+
+    /// Make Status from u16 if known code is passed.
+    pub fn from(code: u16) -> Option<Status> {
+        use self::Status::*;
+        let s = match code {
+            //  1xx
+            100 => Continue,
+            101 => SwitchingProtocol,
+            //  2xx
+            200 => Ok,
+            201 => Created,
+            202 => Accepted,
+            203 => NonAuthoritativeInformation,
+            204 => NoContent,
+            205 => ResetContent,
+            206 => PartialContent,
+            //  3xx
+            300 => MultipleChoices,
+            301 => MovedPermanently,
+            302 => Found,
+            303 => SeeOther,
+            304 => NotModified,
+            305 => UseProxy,
+            307 => TemporaryRedirect,
+            308 => PermanentRedirect,
+            //  4xx
+            400 => BadRequest,
+            401 => Unauthorized,
+            402 => PaymentRequired,
+            403 => Forbidden,
+            404 => NotFound,
+            405 => MethodNotAllowed,
+            406 => NotAcceptable,
+            407 => ProxyAuthenticationRequired,
+            408 => RequestTimeout,
+            409 => Conflict,
+            410 => Gone,
+            411 => LengthRequired,
+            412 => PreconditionFailed,
+            413 => RequestEntityTooLarge,
+            414 => RequestURITooLong,
+            415 => UnsupportedMediaType,
+            416 => RequestRangeNotSatisfiable,
+            417 => ExpectationFailed,
+            426 => UpgradeRequired,
+            429 => TooManyRequests,
+            //  5xx
+            500 => InternalServerError,
+            501 => NotImplemented,
+            502 => BadGateway,
+            503 => ServiceUnavailable,
+            504 => GatewayTimeout,
+            505 => VersionNotSupported,
+            _ => return None,
+        };
+        Some(s)
+    }
 }
