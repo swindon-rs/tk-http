@@ -72,7 +72,7 @@ impl Request {
             method: Method::from(parser.method.unwrap()),
             version: ver,
             path: parser.path.unwrap().to_string(),
-            headers: Vec::with_capacity(MAX_HEADERS),
+            headers: Vec::with_capacity(parser.headers.len()),
             body: None,
 
             connection_close: ver != Version::Http11,
