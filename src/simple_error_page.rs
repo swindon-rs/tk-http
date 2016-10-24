@@ -5,6 +5,7 @@ use tk_bufstream::IoBuf;
 use tokio_core::io::Io;
 
 use serve::GenericResponse;
+use enums::Status;
 use {Error, ResponseWriter};
 
 const PART1: &'static str = "\
@@ -33,22 +34,24 @@ const PART3: &'static str = concat!("\
 ///
 /// This module also serves as a demo of simple response writer
 // TODO(tailhook) use response code enum and it's owned reason string
-pub struct SimpleErrorPage(u16, &'static str);
+pub struct SimpleErrorPage(Status);
 
 impl<S: Io> GenericResponse<S> for SimpleErrorPage {
     type Future = Finished<IoBuf<S>, Error>;
     fn into_serializer(self, mut response: ResponseWriter<S>)
         -> Self::Future
     {
+        let code = self.0.code();
+        let reason = self.0.reason();
         let content_length = PART1.len() + PART2.len() + PART3.len() +
-            2*(4 + self.1.as_bytes().len());
-        response.status(self.0, self.1);
+            2*(4 + reason.as_bytes().len());
+        response.status(self.0);
         response.add_length(content_length as u64).unwrap();
         response.add_header("Content-Type", "text/html").unwrap();
         if response.done_headers().unwrap() {
             write!(&mut response, "\
                 {p1}{code:03} {status}{p2}{code:03} {status}{p3}",
-                    code=self.0, status=self.1,
+                    code=code, status=reason,
                     p1=PART1, p2=PART2, p3=PART3)
                 .expect("writing to a buffer always succeeds");
         }
@@ -57,7 +60,12 @@ impl<S: Io> GenericResponse<S> for SimpleErrorPage {
 }
 
 impl SimpleErrorPage {
-    pub fn new(code: u16, reason: &'static str) -> SimpleErrorPage {
-        SimpleErrorPage(code, reason)
+    /// Create a simple error page
+    ///
+    /// TODO(tailhook) This method will eventually panic when wrong status
+    /// code is used for error page. probably only 4xx and 5xx should be
+    /// allowed.
+    pub fn new(status: Status) -> SimpleErrorPage {
+        SimpleErrorPage(status)
     }
 }

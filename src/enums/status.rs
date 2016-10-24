@@ -1,92 +1,14 @@
 //! Http status codes helpers
-
-
-/// Returns reason for specified status code.
-///
-/// For any unknown code "Unknown" is returned.
-pub fn http_reason<S: HttpStatus>(code: S) -> &'static str {
-    match code.code() {
-        // 1xx codes;
-        100 => "Continue",
-        101 => "Switching Protocol",
-        //  2xx codes
-        200 => "OK",
-        201 => "Created",
-        202 => "Accepted",
-        203 => "Non-Authoriative Information",
-        204 => "No Content",
-        205 => "Reset Content",
-        206 => "Partial Content",
-        //  3xx codes
-        300 => "Multiple Choice",
-        301 => "Moved Permanently",
-        302 => "Found",
-        303 => "See Other",
-        304 => "Not Modified",
-        305 => "Use Proxy",
-        307 => "Temporary Redirect",
-        308 => "Permanent Redirect",
-        //  4xx codes
-        400 => "Bad Request",
-        401 => "Unauthorized",
-        402 => "Payment Required",
-        403 => "Forbidden",
-        404 => "Not Found",
-        405 => "Method Not Allowed",
-        406 => "Not Acceptable",
-        407 => "Proxy Authentication Required",
-        408 => "Request Timeout",
-        409 => "Conflict",
-        410 => "Gone",
-        411 => "Length Required",
-        412 => "Precondition Failed",
-        413 => "Request Entity Too Large",
-        414 => "Request-URI Too Long",
-        415 => "Unsupported Media Type",
-        416 => "Request Range Not Satisfiable",
-        417 => "Expectation Failed",
-        426 => "Upgrade Required",
-        429 => "Too Many Requests",
-        //  5xx codes
-        500 => "Internal Server Error",
-        501 => "Not Implemented",
-        502 => "Bad Gateway",
-        503 => "Service Unavailable",
-        504 => "Gateway Timeout",
-        505 => "HTTP Version Not Supported",
-        // Custom code
-        _ => "Unknown",
-    }
-}
-
-
-pub trait HttpStatus {
-
-    fn code(&self) -> u16;
-
-    fn has_body(&self) -> bool {
-        match self.code() {
-            100...199 | 204 | 304 => false,
-            _ => true,
-        }
-    }
-}
-
-impl HttpStatus for u16 {
-    fn code(&self) -> u16 { *self }
-}
-
+//!
 
 /// Enum with some HTTP Status codes.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Status {
-    // custom http code
-    Raw(u16),
     //  1xx status codes
     Continue,                       // 100
     SwitchingProtocol,              // 101
     //  2xx status codes
-    OK,                             // 200
+    Ok,                             // 200
     Created,                        // 201
     Accepted,                       // 202
     NonAuthoritativeInformation,    // 203
@@ -132,14 +54,17 @@ pub enum Status {
     VersionNotSupported,            // 505
 }
 
-impl HttpStatus for Status {
-    fn code(&self) -> u16 {
+/// Returns reason for specified status code.
+impl Status {
+
+    /// Returns 3 digit numeric code
+    pub fn code(&self) -> u16 {
         match *self {
             //  1xx Status codes
             Status::Continue                        => 100,
             Status::SwitchingProtocol               => 101,
             //  2xx status codes
-            Status::OK                              => 200,
+            Status::Ok                              => 200,
             Status::Created                         => 201,
             Status::Accepted                        => 202,
             Status::NonAuthoritativeInformation     => 203,
@@ -183,8 +108,70 @@ impl HttpStatus for Status {
             Status::ServiceUnavailable              => 503,
             Status::GatewayTimeout                  => 504,
             Status::VersionNotSupported             => 505,
+        }
+    }
+
+    /// Returns title for the status code
+    pub fn reason(&self) -> &'static str {
+        match self.code() {
+            // 1xx codes;
+            100 => "Continue",
+            101 => "Switching Protocol",
+            //  2xx codes
+            200 => "OK",
+            201 => "Created",
+            202 => "Accepted",
+            203 => "Non-Authoriative Information",
+            204 => "No Content",
+            205 => "Reset Content",
+            206 => "Partial Content",
+            //  3xx codes
+            300 => "Multiple Choice",
+            301 => "Moved Permanently",
+            302 => "Found",
+            303 => "See Other",
+            304 => "Not Modified",
+            305 => "Use Proxy",
+            307 => "Temporary Redirect",
+            308 => "Permanent Redirect",
+            //  4xx codes
+            400 => "Bad Request",
+            401 => "Unauthorized",
+            402 => "Payment Required",
+            403 => "Forbidden",
+            404 => "Not Found",
+            405 => "Method Not Allowed",
+            406 => "Not Acceptable",
+            407 => "Proxy Authentication Required",
+            408 => "Request Timeout",
+            409 => "Conflict",
+            410 => "Gone",
+            411 => "Length Required",
+            412 => "Precondition Failed",
+            413 => "Request Entity Too Large",
+            414 => "Request-URI Too Long",
+            415 => "Unsupported Media Type",
+            416 => "Request Range Not Satisfiable",
+            417 => "Expectation Failed",
+            426 => "Upgrade Required",
+            429 => "Too Many Requests",
+            //  5xx codes
+            500 => "Internal Server Error",
+            501 => "Not Implemented",
+            502 => "Bad Gateway",
+            503 => "Service Unavailable",
+            504 => "Gateway Timeout",
+            505 => "HTTP Version Not Supported",
             // Custom code
-            Status::Raw(code)                       => code,
+            _ => "Unknown",
+        }
+    }
+
+    /// Returns true if sending body is expected for such status code
+    pub fn response_has_body(&self) -> bool {
+        match self.code() {
+            100...199 | 204 | 304 => false,
+            _ => true,
         }
     }
 }

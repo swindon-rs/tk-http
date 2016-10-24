@@ -24,7 +24,7 @@ use tk_bufstream::IoBuf;
 use tk_sendfile::DiskPool;
 
 use minihttp::request::Request;
-use minihttp::{ResponseWriter, GenericResponse, Error};
+use minihttp::{ResponseWriter, GenericResponse, Error, Status};
 
 #[derive(Clone)]
 struct HelloWorld {
@@ -41,7 +41,7 @@ impl GenericResponse<TcpStream> for Response {
     {
         self.0.open(self.1)
         .and_then(move |file| {
-            response.status(200, "OK");
+            response.status(Status::Ok);
             response.add_length(file.size()).unwrap();
             if response.done_headers().unwrap() {
                 response.steal_socket()

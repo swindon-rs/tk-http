@@ -17,7 +17,7 @@
 //! use tokio_core::reactor::Core;
 //! use tokio_core::net::TcpStream;
 //! use futures::{Async, Finished, finished};
-//! use minihttp::{Request, Error, ResponseFn};
+//! use minihttp::{Request, Error, ResponseFn, Status};
 //!
 //! #[derive(Clone)]
 //! struct HelloWorld;
@@ -35,7 +35,7 @@
 //!        // writes them directly into response buffer without allocating
 //!        // intermediate structures
 //!        finished(ResponseFn::new(move |mut res| {
-//!            res.status(200, "OK");
+//!            res.status(Status::Ok);
 //!            res.add_chunked().unwrap();
 //!            if res.done_headers().unwrap() {
 //!                res.write_body(b"Hello world!");
@@ -84,7 +84,7 @@ use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpListener, TcpStream};
 use tokio_service::NewService;
 
-pub use enums::Version;
+pub use enums::{Version, Status};
 pub use request::Request;
 pub use error::Error;
 pub use serve::{GenericResponse, ResponseWriter};

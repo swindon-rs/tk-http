@@ -9,7 +9,7 @@ use tokio_core::io::Io;
 use tk_bufstream::Flushed;
 
 use base_serializer::{MessageState, Message, HeaderError};
-use enums::Version;
+use enums::{Version, Status};
 
 
 /// This response is returned when Response is dropping without writing
@@ -89,7 +89,7 @@ impl<S: Io> ResponseWriter<S> {
         self.0.response_continue()
     }
 
-    /// Write status line.
+    /// Write status line using `Status` enum
     ///
     /// This puts status line into a buffer immediately. If you don't
     /// continue with request it will be sent to the network shortly.
@@ -101,9 +101,23 @@ impl<S: Io> ResponseWriter<S> {
     ///
     /// When the status code is 100 (Continue). 100 is not allowed
     /// as a final status code.
-    pub fn status(&mut self, code: u16, reason: &str) {
+    pub fn status(&mut self, status: Status) {
+        self.0.response_status(status.code(), status.reason())
+    }
+
+    /// Write custom status line
+    ///
+    /// # Panics
+    ///
+    /// When status line is already written. It's expected that your request
+    /// handler state machine will never call the method twice.
+    ///
+    /// When the status code is 100 (Continue). 100 is not allowed
+    /// as a final status code.
+    pub fn custom_status(&mut self, code: u16, reason: &str) {
         self.0.response_status(code, reason)
     }
+
     /// Add a header to the message.
     ///
     /// Header is written into the output buffer immediately. And is sent

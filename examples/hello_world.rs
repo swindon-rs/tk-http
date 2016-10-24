@@ -16,7 +16,7 @@ use tokio_service::Service;
 use tk_bufstream::IoBuf;
 use futures::{Async, Finished, finished};
 
-use minihttp::{ResponseFn, Error};
+use minihttp::{ResponseFn, Error, Status};
 use minihttp::request::Request;
 
 #[derive(Clone)]
@@ -32,7 +32,7 @@ impl Service for HelloWorld {
 
     fn call(&self, _req: Self::Request) -> Self::Future {
         finished(ResponseFn::new(move |mut res| {
-            res.status(200, "OK");
+            res.status(Status::Ok);
             res.add_length(BODY.as_bytes().len() as u64).unwrap();
             res.format_header("Date", time::now_utc().rfc822()).unwrap();
             res.add_header("Server", concat!("minihttp/",
