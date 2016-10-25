@@ -118,7 +118,7 @@ pub fn serve<T>(handle: &Handle, addr: SocketAddr, service: T)
         trace!("Got incomming connection: {:?}, {:?}", stream, addr);
         let handler = service.new_service().unwrap();
         handle2.spawn(
-            server::HttpServer::new(stream, handler)
+            server::HttpServer::new(stream, handler, addr)
             .map(|()| { trace!("Connection closed"); })
             .map_err(|err| { debug!("Connection error: {:?}", err); }));
         Ok(())

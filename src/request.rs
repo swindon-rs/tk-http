@@ -3,6 +3,7 @@ use std::convert::From;
 use std::str;
 use std::str::FromStr;
 use std::ascii::AsciiExt;
+use std::net::SocketAddr;
 
 use httparse;
 use netbuf::Buf;
@@ -31,6 +32,7 @@ pub struct Request {
     pub headers: Vec<(Header, String)>,
 
     pub body: Option<Body>,
+    pub peer_addr: SocketAddr,
 
     // some known headers
     connection_close: bool,
@@ -46,7 +48,9 @@ pub struct Request {
 
 impl Request {
 
-    pub fn parse_from(buf: &Buf) -> Poll<(Request,usize,BodyKind), Error> {
+    pub fn parse_from(buf: &Buf, peer_addr: &SocketAddr)
+        -> Poll<(Request, usize, BodyKind), Error>
+    {
         let mut headers = [httparse::EMPTY_HEADER; MIN_HEADERS];
         let mut vec;
         let mut parser = httparse::Request::new(&mut headers);
@@ -74,6 +78,7 @@ impl Request {
             path: parser.path.unwrap().to_string(),
             headers: Vec::with_capacity(parser.headers.len()),
             body: None,
+            peer_addr: peer_addr.clone(),
 
             connection_close: ver != Version::Http11,
             host: None,
@@ -240,14 +245,16 @@ impl RequestParser {
         RequestParser (ParseState::Idle, None)
     }
 
-    pub fn parse_from(&mut self, buf: &mut Buf) -> Result<bool, Error> {
+    pub fn parse_from(&mut self, buf: &mut Buf, peer_addr: &SocketAddr)
+        -> Result<bool, Error>
+    {
         loop {  // transition through states until result is reached;
             match self.0 {
                 ParseState::Idle => {
                     self.0 = ParseState::Request;
                 },
                 ParseState::Request => {
-                    match try!(Request::parse_from(buf)) {
+                    match try!(Request::parse_from(buf, peer_addr)) {
                         Async::NotReady => break,
                         Async::Ready((req, size, body_kind)) => {
                             buf.consume(size);

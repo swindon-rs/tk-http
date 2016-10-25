@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::net::SocketAddr;
 
 use tk_bufstream::IoBuf;
 use futures::{Future, Poll, Async};
@@ -29,6 +30,7 @@ pub struct HttpServer<T, S>
     /// Socket and output buffer, it's None when connection is borrowed by
     ///
     conn: Option<IoBuf<S>>,
+    peer_addr: SocketAddr,
     request_parser: RequestParser,
     service: T,
     in_flight: VecDeque<InFlight<T::Future, T::Response, S>>,
@@ -40,9 +42,12 @@ impl<T, S> HttpServer<T, S>
           S: Io
 {
 
-    pub fn new(socket: S, service: T) -> HttpServer<T, S> {
+    pub fn new(socket: S, service: T, peer_addr: SocketAddr)
+        -> HttpServer<T, S>
+    {
         HttpServer {
             conn: Some(IoBuf::new(socket)),
+            peer_addr: peer_addr,
             request_parser: RequestParser::new(),
             service: service,
             in_flight: VecDeque::with_capacity(32),
@@ -52,7 +57,9 @@ impl<T, S> HttpServer<T, S>
     fn read_and_process(&mut self) -> Result<(), Error> {
         if let Some(ref mut conn) = self.conn {
             loop {
-                while !try!(self.request_parser.parse_from(&mut conn.in_buf)) {
+                while !try!(self.request_parser.parse_from(
+                    &mut conn.in_buf, &self.peer_addr))
+                {
                     if try!(conn.read()) == 0 {
                         return Ok(());
                     }
