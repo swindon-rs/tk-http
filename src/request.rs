@@ -1,8 +1,6 @@
 use std::mem;
 use std::convert::From;
 use std::str;
-use std::str::FromStr;
-use std::ascii::AsciiExt;
 use std::net::SocketAddr;
 
 use httparse;
@@ -38,10 +36,10 @@ pub struct Request {
     connection_close: bool,
     // TODO: get rid of this crap;
     //      must implement proper Headers structure.
-    host: Option<usize>,
+    host: Option<String>,
     content_type: Option<usize>,
-    content_length: Option<usize>,
-    transfer_encoding: Option<usize>,
+    content_length: Option<u64>,
+    transfer_encoding: Option<String>,
     // add more known headers;
 }
 
@@ -98,50 +96,56 @@ impl Request {
         // TODO(popravich) revise body detection
         // see  http://httpwg.github.io/specs/rfc7230.html#message.body.length
         //      rotor-http/parser.rs#L86-L120
+        use super::enums::headers;
         let mut body_kind = BodyKind::WithoutBody;
+        let mut has_content_length = false;
 
         for h in parser.headers.iter() {
-            let header = Header::from(h.name);
-            let value = String::from_utf8_lossy(h.value).into_owned();
-            match header {
+            match Header::from(h.name) {
                 Header::Host => {
-                    self.host = Some(self.headers.len());
-                },
+                    // TODO: check that hostname is valid (idn)
+                    self.host = Some(
+                        String::from_utf8_lossy(h.value).into_owned());
+                }
                 Header::Connection => {
-                    if value.split(',')
-                        .any(|token| token.eq_ignore_ascii_case("close"))
-                    {
+                    if headers::is_close(h.value) {
                         self.connection_close = true;
                     }
-                },
-                Header::ContentLength => {
-                    // check if value is usize:
-                    self.content_length = Some(self.headers.len());
-                    match value.parse::<usize>() {
-                        Ok(size) => {
-                            if body_kind != BodyKind::Chunked {
-                                body_kind = BodyKind::Fixed(size);
-                            }
-                        },
-                        _ => {},
-                    }
-                },
-                Header::TransferEncoding => {
-                    self.transfer_encoding = Some(self.headers.len());
-                    match value.split(|c| c == ',').last().map(|c| c.trim()) {
-                        Some("chunked") => {
-                            if let BodyKind::Fixed(_) = body_kind {
-                                self.connection_close = true;
-                            }
-                            body_kind = BodyKind::Chunked;
-                        }
-                        _ => {},
-                    }
-                    // is chunked
+                    let value = String::from_utf8_lossy(h.value).into_owned();
+                    self.headers.push((Header::Connection, value));
                 }
-                _ => {},
+                Header::ContentLength => {
+                    if has_content_length {
+                        // TODO: replace with proper error;
+                        panic!("duplicate content length")
+                    }
+                    has_content_length = true;
+                    if let Some(size) = headers::content_length(h.value) {
+                        self.content_length = Some(size);
+                        if body_kind != BodyKind::Chunked {
+                            body_kind = BodyKind::Fixed(size as usize); // XXX
+                        }
+                    }
+                }
+                Header::TransferEncoding => {
+                    if headers::is_chunked(h.value) {
+                        if has_content_length {
+                            self.connection_close = true;
+                        }
+                        body_kind = BodyKind::Chunked;
+                    } else {
+                        // TODO: 400 Bad request;
+                    }
+                    let value = String::from_utf8_lossy(h.value).into_owned();
+                    self.transfer_encoding = Some(value);
+                }
+                header => {
+                    // TODO: store original bytes not converted to string
+                    //      (especially 'lossy')
+                    let value = String::from_utf8_lossy(h.value).into_owned();
+                    self.headers.push((header, value));
+                }
             }
-            self.headers.push((header, value));
         }
         body_kind
     }
@@ -153,9 +157,9 @@ impl Request {
     }
 
     /// Value of Host header
-    pub fn host(&self) -> Option<&str> {
+    pub fn host<'a>(&'a self) -> Option<&'a str> {
         match self.host {
-            Some(idx) => Some(self.headers[idx].1.as_ref()),
+            Some(ref s) => Some(s.as_ref()),
             None => None,
         }
     }
@@ -169,25 +173,15 @@ impl Request {
     }
 
     /// Value of Content-Length header
-    pub fn content_length(&self) -> Option<usize> {
-        match self.content_length {
-            None => None,
-            Some(idx) => {
-                match usize::from_str(self.headers[idx].1.as_ref()) {
-                    Ok(size) => Some(size),
-                    Err(_) => None,
-                }
-            },
-        }
+    pub fn content_length(&self) -> Option<u64> {
+        self.content_length.map(|x| x.clone())
     }
 
     /// Value of Transfer-Encoding header
     pub fn transfer_encoding(&self) -> Option<&str> {
         match self.transfer_encoding {
+            Some(ref s) => Some(s.as_ref()),
             None => None,
-            Some(idx) => {
-                Some(self.headers[idx].1.as_ref())
-            }
         }
     }
 }
@@ -230,7 +224,7 @@ enum ParseState {
     /// Parsing fixed-size body.
     FixedBody { size: usize },
     /// Parsing chunked body.
-    ChunkedBody { next_chunk_offset: usize },
+    ChunkedBody { end: usize },
     /// Without body.
     WithoutBody,
     /// Request & Body are parsed.
@@ -248,42 +242,47 @@ impl RequestParser {
     pub fn parse_from(&mut self, buf: &mut Buf, peer_addr: &SocketAddr)
         -> Result<bool, Error>
     {
+        use self::ParseState::*;
         loop {  // transition through states until result is reached;
             match self.0 {
-                ParseState::Idle => {
-                    self.0 = ParseState::Request;
+                Idle => {
+                    self.0 = Request;
                 },
-                ParseState::Request => {
-                    match try!(Request::parse_from(buf, peer_addr)) {
+                Request => {
+                    match try!(self::Request::parse_from(buf, peer_addr)) {
                         Async::NotReady => break,
                         Async::Ready((req, size, body_kind)) => {
-                            buf.consume(size);
                             self.1 = Some(req);
+                            buf.consume(size);
                             self.0 = match body_kind {
-                                BodyKind::Fixed(size) => ParseState::FixedBody{size: size},
-                                BodyKind::Chunked => ParseState::ChunkedBody{next_chunk_offset: 0},
-                                BodyKind::WithoutBody => ParseState::WithoutBody,
-                            };
-                        },
+                                BodyKind::Fixed(size) => {
+                                    FixedBody { size: size }
+                                }
+                                BodyKind::Chunked => {
+                                    ChunkedBody { end: 0 }
+                                }
+                                BodyKind::WithoutBody => WithoutBody,
+                            }
+                        }
                     }
                 },
-                ParseState::FixedBody { size } => {
+                FixedBody { size } => {
                     if buf.len() >= size {
-                        let mut req = self.1.take().unwrap();
+                        let mut req = self.1.as_mut().unwrap();
                         let mut bbuf = buf.split_off(size);
                         mem::swap(&mut bbuf, buf);
                         req.body = Some(Body::new(bbuf));
-                        self.1 = Some(req);
                         self.0 = ParseState::Done;
                     } else {
                         break;
                     }
                 },
-                ParseState::ChunkedBody { mut next_chunk_offset } => {
-                    if next_chunk_offset > buf.len() {
+                ChunkedBody { mut end } => {
+                    if end > buf.len() {
                         break;
                     }
-                    let (off, size) = match httparse::parse_chunk_size(&buf[next_chunk_offset..]) {
+                    let res = httparse::parse_chunk_size(&buf[end..]);
+                    let (off, size) = match res {
                         Ok(httparse::Status::Complete(res)) => res,
                         Ok(httparse::Status::Partial) => {
                             break;
@@ -292,21 +291,20 @@ impl RequestParser {
                             return Err(e.into());
                         },
                     };
-                    buf.remove_range(next_chunk_offset .. next_chunk_offset + off as usize);
-                    next_chunk_offset += size as usize;
+                    buf.remove_range(end .. end + off as usize);
+                    end += size as usize;
                     if size == 0 {
-                        let mut req = self.1.take().unwrap();
-                        let tail = buf.split_off(next_chunk_offset);
+                        let mut req = self.1.as_mut().unwrap();
+                        let tail = buf.split_off(end);
                         let bbuf = mem::replace(buf, tail);
                         req.body = Some(Body::new(bbuf));
-                        self.1 = Some(req);
                         self.0 = ParseState::Done;
                     }
                 },
-                ParseState::WithoutBody => {
+                WithoutBody => {
                     self.0 = ParseState::Done;
                 },
-                ParseState::Done => {
+                Done => {
                     return Ok(true)
                 }
             }

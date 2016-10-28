@@ -1,3 +1,4 @@
+use std::str;
 use std::convert::From;
 use std::ascii::AsciiExt;
 
@@ -102,5 +103,36 @@ impl AsRef<str> for Header {
             TransferEncoding => "Transfer-Encoding",
             Raw(ref x) => x,
         }
+    }
+}
+
+
+pub fn is_close(val: &[u8]) -> bool {
+    val.split(|&x| x == b',')
+        .any(|token| token.eq_ignore_ascii_case(b"close"))
+}
+
+pub fn is_chunked(val: &[u8]) -> bool {
+    str::from_utf8(val).ok()
+    .and_then(|s| s.split(',').last())
+    .map(|t| t.trim() == "chunked")
+    .unwrap_or(false)
+}
+
+pub fn content_length(val: &[u8]) -> Option<u64> {
+    str::from_utf8(val).ok().and_then(|v| v.parse().ok())
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::is_chunked;
+
+    #[test]
+    fn chunked() {
+        assert!(is_chunked(b"chunked"));
+        assert!(is_chunked(b" chunked"));
+        assert!(is_chunked(b"foo, chunked"));
+        assert!(is_chunked(b"foo, bar,chunked"));
     }
 }
