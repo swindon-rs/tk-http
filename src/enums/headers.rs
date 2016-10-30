@@ -90,3 +90,17 @@ impl PartialEq<str> for Header {
         }
     }
 }
+
+impl AsRef<str> for Header {
+    fn as_ref(&self) -> &str {
+        use self::Header::*;
+        match *self {
+            Host => "Host",
+            Connection => "Connection",
+            KeepAlive => "Keep-Alive",
+            ContentLength => "Content-Length",
+            TransferEncoding => "Transfer-Encoding",
+            Raw(ref x) => x,
+        }
+    }
+}
