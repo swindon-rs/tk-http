@@ -65,11 +65,15 @@ extern crate tk_bufstream;
 #[macro_use(quick_error)] extern crate quick_error;
 #[macro_use] extern crate matches;
 #[macro_use] extern crate log;
+// Use curl/tokio-curl until own implementation.
+extern crate tokio_curl;
+extern crate curl;
 
 
 pub mod request;
 pub mod server;
 pub mod enums;
+pub mod client;
 mod error;
 mod lambda;
 mod simple_error_page;
