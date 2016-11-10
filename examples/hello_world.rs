@@ -14,7 +14,7 @@ use tokio_core::reactor::Core;
 use tokio_core::net::TcpStream;
 use tokio_service::Service;
 use tk_bufstream::IoBuf;
-use futures::{Async, Finished, finished};
+use futures::{Finished, finished};
 
 use minihttp::{ResponseFn, Error, Status};
 use minihttp::request::Request;
@@ -43,10 +43,6 @@ impl Service for HelloWorld {
             res.done()
         }))
     }
-
-    fn poll_ready(&self) -> Async<()> {
-        Async::Ready(())
-    }
 }
 
 
@@ -60,7 +56,7 @@ fn main() {
 
     let addr = "0.0.0.0:8080".parse().unwrap();
 
-    minihttp::serve(&lp.handle(), addr, HelloWorld);
+    minihttp::serve(&lp.handle(), addr, || Ok(HelloWorld));
 
     lp.run(futures::empty::<(), ()>()).unwrap();
 }

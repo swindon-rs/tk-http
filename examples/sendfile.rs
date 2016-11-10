@@ -18,7 +18,7 @@ use argparse::{ArgumentParser, Parse};
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpStream;
 use tokio_service::Service;
-use futures::{Async, BoxFuture, Future};
+use futures::{BoxFuture, Future};
 use futures_cpupool::CpuPool;
 use tk_bufstream::IoBuf;
 use tk_sendfile::DiskPool;
@@ -63,10 +63,6 @@ impl Service for HelloWorld {
     fn call(&self, _req: Self::Request) -> Self::Future {
         futures::finished(Response(self.pool.clone(), self.path.clone()))
     }
-
-    fn poll_ready(&self) -> Async<()> {
-        Async::Ready(())
-    }
 }
 
 
@@ -93,11 +89,12 @@ fn main() {
     let disk_pool = DiskPool::new(CpuPool::new(40));
 
     let mut lp = Core::new().unwrap();
-
-    minihttp::serve(&lp.handle(), addr, HelloWorld {
+    let svc = HelloWorld {
         pool: disk_pool,
         path: filename,
-    });
+    };
+
+    minihttp::serve(&lp.handle(), addr, move || Ok(svc.clone()));
 
     lp.run(futures::empty::<(), ()>()).unwrap();
 }
