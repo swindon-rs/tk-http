@@ -57,10 +57,10 @@ impl<T, S> HttpServer<T, S>
     fn read_and_process(&mut self) -> Result<(), Error> {
         if let Some(ref mut conn) = self.conn {
             loop {
-                while !try!(self.request_parser.parse_from(
-                    &mut conn.in_buf, &self.peer_addr))
+                while !self.request_parser.parse_from(
+                    &mut conn.in_buf, &self.peer_addr)?
                 {
-                    if try!(conn.read()) == 0 {
+                    if conn.read()? == 0 {
                         return Ok(());
                     }
                 }
@@ -92,7 +92,7 @@ impl<T, S> HttpServer<T, S>
         loop {
             match self.in_flight.front_mut() {
                 Some(&mut InFlight::Responding(ref mut fut)) => {
-                    match try!(fut.poll()) {
+                    match fut.poll()? {
                         Async::Ready(conn) => {
                             self.conn = Some(conn);
                         }
@@ -126,14 +126,14 @@ impl<T, S> Future for HttpServer<T, S>
 
     fn poll(&mut self) -> Poll<(), Error> {
         if let Some(ref mut conn) = self.conn {
-            try!(conn.flush());
+            conn.flush()?;
         }
-        try!(self.read_and_process());
+        self.read_and_process()?;
 
-        try!(self.poll_waiters());
+        self.poll_waiters()?;
 
         if let Some(ref mut conn) = self.conn {
-            try!(conn.flush());
+            conn.flush()?;
             if conn.done() {
                 return Ok(Async::Ready(()));
             }

@@ -249,7 +249,7 @@ impl RequestParser {
                     self.0 = Request;
                 },
                 Request => {
-                    match try!(self::Request::parse_from(buf, peer_addr)) {
+                    match self::Request::parse_from(buf, peer_addr)? {
                         Async::NotReady => break,
                         Async::Ready((req, size, body_kind)) => {
                             self.1 = Some(req);

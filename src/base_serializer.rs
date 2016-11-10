@@ -266,7 +266,7 @@ impl Message {
         }
         match self.1 {
             Headers { .. } | FixedHeaders { .. } | ChunkedHeaders { .. } => {
-                try!(self.write_header(name, value));
+                self.write_header(name, value)?;
                 Ok(())
             }
             ref state => {
@@ -292,7 +292,7 @@ impl Message {
         }
         match self.1 {
             Headers { .. } | FixedHeaders { .. } | ChunkedHeaders { .. } => {
-                try!(self.write_formatted(name, value));
+                self.write_formatted(name, value)?;
                 Ok(())
             }
             ref state => {
@@ -321,7 +321,7 @@ impl Message {
             ChunkedHeaders { .. } => Err(ContentLengthAfterTransferEncoding),
             Headers { body: Denied, .. } => Err(RequireBodyless),
             Headers { body, close } => {
-                try!(self.write_formatted("Content-Length", n));
+                self.write_formatted("Content-Length", n)?;
                 self.1 = FixedHeaders { is_head: body == Head,
                                         close: close,
                                         content_length: n };
@@ -353,7 +353,7 @@ impl Message {
                 ChunkedHeaders { .. } => Err(DuplicateTransferEncoding),
                 Headers { body: Denied, .. } => Err(RequireBodyless),
                 Headers { body, close } => {
-                    try!(self.write_header("Transfer-Encoding", b"chunked"));
+                    self.write_header("Transfer-Encoding", b"chunked")?;
                     self.1 = ChunkedHeaders { is_head: body == Head,
                                               close: close };
                     Ok(())
