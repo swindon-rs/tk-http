@@ -406,6 +406,9 @@ fn parse_body(buf: &mut Buf, body_kind: BodyKind)
                 };
                 buf.remove_range(end .. end + off as usize);
                 end += size as usize;
+                if end + 2 <= buf.len() && &buf[end .. end+2] == b"\r\n" {
+                    buf.remove_range(end .. end + 2);
+                }
                 if size == 0 {
                     let bbuf = buf.split_off(end);
                     let bbuf = mem::replace(buf, bbuf);
@@ -413,5 +416,29 @@ fn parse_body(buf: &mut Buf, body_kind: BodyKind)
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use netbuf::Buf;
+    use std::str;
+    use super::parse_body;
+    use super::BodyKind;
+
+    #[test]
+    fn parse_chunked_body() {
+        let mut buf = Buf::new();
+        buf.extend(b"\
+            5\r\nHello\r\n\
+            7\r\n World!\r\n\
+            1a\r\n\nTransfer encoding checked\r\n\
+            0\r\n\r\n"
+            );
+        let res = parse_body(&mut buf, BodyKind::Chunked);
+        assert!(res.is_some());
+        let body = res.unwrap();
+        assert_eq!(str::from_utf8(&body[..]).unwrap(),
+            "Hello World!\nTransfer encoding checked");
     }
 }

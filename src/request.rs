@@ -293,6 +293,10 @@ impl RequestParser {
                     };
                     buf.remove_range(end .. end + off as usize);
                     end += size as usize;
+                    if end + 2 <= buf.len() && &buf[end .. end+2] == b"\r\n" {
+                        buf.remove_range(end .. end + 2);
+                    }
+                    self.0 = ParseState::ChunkedBody { end: end };
                     if size == 0 {
                         let mut req = self.1.as_mut().unwrap();
                         let tail = buf.split_off(end);
@@ -320,5 +324,35 @@ impl RequestParser {
             },
             ref state => panic!("Incomplete parse state {:?}", state),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use netbuf::Buf;
+    use super::RequestParser;
+    use std::str;
+
+    #[test]
+    fn parse_chunked_body() {
+        let mut buf = Buf::new();
+        buf.extend(b"POST / HTTP/1.1\r\n\
+            Transfer-Encoding: chunked\r\n\
+            \r\n\
+            5\r\nHello\r\n\
+            7\r\n World!\r\n\
+            1a\r\n\nTransfer encoding checked\r\n\
+            0\r\n\r\n"
+        );
+
+        let mut parser = RequestParser::new();
+
+        let res = parser.parse_from(&mut buf,
+            &"127.0.0.1:1234".parse().unwrap());
+        assert!(res.is_ok());
+        assert!(res.unwrap());
+        let body = parser.take().unwrap().body.unwrap();
+        assert_eq!(str::from_utf8(&body.data[..]).unwrap(),
+            "Hello World!\nTransfer encoding checked");
     }
 }
