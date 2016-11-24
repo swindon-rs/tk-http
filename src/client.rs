@@ -396,25 +396,7 @@ fn parse_body(buf: &mut Buf, body_kind: BodyKind)
             Some(bbuf)
         }
         BodyKind::Chunked => {
-            let mut end = 0;
-            loop {
-                assert!(end <= buf.len());
-                let res = httparse::parse_chunk_size(&buf[end..]);
-                let (off, size) = match res.unwrap() {
-                    httparse::Status::Complete(res) => res,
-                    _ => panic!("not implemented"),
-                };
-                buf.remove_range(end .. end + off as usize);
-                end += size as usize;
-                if end + 2 <= buf.len() && &buf[end .. end+2] == b"\r\n" {
-                    buf.remove_range(end .. end + 2);
-                }
-                if size == 0 {
-                    let bbuf = buf.split_off(end);
-                    let bbuf = mem::replace(buf, bbuf);
-                    return Some(bbuf);
-                }
-            }
+            Some(mem::replace(buf, Buf::new()))
         }
     }
 }
