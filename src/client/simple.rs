@@ -14,7 +14,19 @@ use client::proto::Proto;
 use client::buffered::{Buffered, Response};
 
 
-pub fn fetch(url: Url, handle: &Handle)
+/// This is a simplistic function to just do a GET request for an url
+/// and return result.
+///
+/// This function:
+/// * Starts `ThreadedResolver` with one thread
+/// * Resolves a name
+/// * Connects to a random peer
+/// * Fetches result into a buffer with maximum size of 10Mb
+/// * Closes everything
+///
+/// So it's very inefficient but good enough for command-line tools or example
+/// scripts.
+pub fn fetch_once_buffered(url: Url, handle: &Handle)
     -> Box<Future<Item=Response, Error=Error>>
 {
     let handle = handle.clone();

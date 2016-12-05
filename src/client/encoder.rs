@@ -15,6 +15,10 @@ pub enum RequestState {
     StartedNormal = 2,
 }
 
+/// This a request writer that you receive in `Codec`
+///
+/// Methods of this structure ensure that everything you write into a buffer
+/// is consistent and valid protocol
 pub struct Encoder<S: Io> {
     message: MessageState,
     buf: WriteBuf<S>,
@@ -23,6 +27,8 @@ pub struct Encoder<S: Io> {
     close_signal: Arc<AtomicBool>,
 }
 
+/// This structure returned from `Encoder::done` and works as a continuation
+/// that should be returned from the future that writes request.
 pub struct EncoderDone<S: Io> {
     buf: WriteBuf<S>,
 }

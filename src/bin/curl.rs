@@ -47,8 +47,10 @@ pub fn main() {
     let handle = lp.handle();
 
     let response = lp.run(
-        minihttp::client::fetch(opt.url, &handle)
-    ).unwrap();
+        // TODO(tailhook) don't use buffered request stream body to stdout
+        // instead
+        minihttp::client::fetch_once_buffered(opt.url, &handle)
+    ).expect("request failed");
     if let Some(filename) = opt.dump_header {
         let mut out: Box<io::Write> = if filename == Path::new("-") {
             Box::new(io::stdout())

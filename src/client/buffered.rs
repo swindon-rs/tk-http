@@ -1,3 +1,14 @@
+//! Simple to use wrappers for dealing with fully buffered requests
+//!
+//! By "fully buffered" I mean two things:
+//!
+//! * No request or response streaming
+//! * All headers and body are allocated on the heap
+//!
+//! Raw interface allows more granular control to make things more efficient,
+//! but requires more boilerplate. You can mix and match different
+//! styles on single HTTP connection.
+//!
 use url::Url;
 use futures::Async;
 use futures::sync::oneshot::{channel, Sender, Receiver};
@@ -8,7 +19,7 @@ use client::{Error, Codec, Encoder, EncoderDone, Head};
 use {OptFuture};
 use client::client::RecvMode;
 
-/// Fully buffered writing request and reading response
+/// Fully buffered (in-memory) writing request and reading response
 ///
 /// This coded should be used when you don't have any special needs
 pub struct Buffered {
@@ -20,6 +31,7 @@ pub struct Buffered {
 }
 
 #[derive(Debug)]
+/// A buffered response holds contains a body as contiguous chunk of data
 pub struct Response {
     code: u16,
     reason: String,

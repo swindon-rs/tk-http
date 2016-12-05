@@ -52,6 +52,14 @@ pub enum RecvMode {
 
 
 #[derive(Debug)]
+/// A borrowed structure that represents response headers
+///
+/// It's passed to `Codec::headers_received` and you are free to store or
+/// discard any needed fields and headers from it.
+///
+/// Note, we don't strip hop-by-hop headers (`Connection: close`,
+/// `Transfer-Encoding`) and we use them to ensure correctness of the protocol.
+/// You must skip them if proxying headers somewhere.
 pub struct Head<'a> {
     pub version: Version,
     pub code: u16,
@@ -62,11 +70,39 @@ pub struct Head<'a> {
 }
 
 
+/// This is a low-level interface to the http client
+///
+/// Your requests starts by sending a codec into a connection Sink or a
+/// connection pool. And then it's driven by a callbacks here.
+///
+/// If you don't have any special needs you might want to use
+/// `client::buffered::Buffered` codec implementation instead of implemeting
+/// this trait manually.
 pub trait Codec<S: Io> {
 
+    /// Start writing a request
+    ///
+    /// This method is called when there is an open connection and there
+    /// is some space in the output buffer.
+    ///
+    /// Everything you write into a buffer might be flushed to the network
+    /// immediately (or as fast as you yield to main loop). On the other
+    /// hand we might buffer/pipeline multiple requests at once.
     fn start_write(&mut self, e: Encoder<S>)
         -> OptFuture<EncoderDone<S>, Error>;
 
+    /// Received headers of a response
+    ///
+    /// At this point we already extracted all the headers and other data
+    /// that we need to ensure correctness of the protocol. If you need
+    /// to handle some data from the headers you need to store them somewhere
+    /// (for example on `self`) for further processing.
+    ///
+    /// Note: headers might be received after `request_line` is written, but
+    /// we don't ensure that request is fully written. You should write the
+    /// state machine as if request and response might be streamed a the
+    /// same time (including request headers (!) if your `start_write` future
+    /// writes them incrementally)
     fn headers_received(&mut self, headers: &Head) -> Result<RecvMode, Error>;
 
     /// Chunk of the response body received
@@ -90,5 +126,10 @@ pub trait Codec<S: Io> {
 }
 
 
+/// A marker trait that applies to a Sink that is essentially a HTTP client
+///
+/// It may apply to a single connection or connection pool
+///
+/// (We're not sure of whether we keep this trait or just use Sink directly)
 pub trait Client<C: Codec<S>, S: Io>: Sink<SinkItem=C, SinkError=Error> {
 }

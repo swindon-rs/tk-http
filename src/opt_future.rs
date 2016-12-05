@@ -4,6 +4,16 @@ use futures::{Future, Poll};
 use futures::Async::{Ready, NotReady};
 
 
+/// Optional future
+///
+/// This is a future that can hold either a result directly, similarly to
+/// a `futures::done` or a real future. Future is stored in a `Box`ed form, to
+/// keep signature of this structure simpler.
+///
+/// This works in the cases where we can check if we have a hot path where we
+/// almost never return a future. So the consumer of the future can check
+/// enum and do something immediately on the fast path, and proceed the long
+/// path with a boxed future otherwise.
 pub enum OptFuture<I, E> {
     Future(Box<Future<Item=I, Error=E>>),
     Value(Result<I, E>),
