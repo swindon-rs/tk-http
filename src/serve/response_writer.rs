@@ -1,14 +1,12 @@
 use std::io;
-use std::mem;
 use std::fmt::Display;
 
-use netbuf::Buf;
 use futures::{Finished, finished};
 use tk_bufstream::IoBuf;
 use tokio_core::io::Io;
 use tk_bufstream::Flushed;
 
-use base_serializer::{MessageState, Message, HeaderError};
+use base_serializer::{MessageState, HeaderError};
 use enums::{Version, Status};
 
 
@@ -30,46 +28,47 @@ pub const NOT_IMPLEMENTED_HEAD: &'static str = concat!(
     "\r\n",
     );
 
-pub struct ResponseWriter<S: Io>(Message, IoBuf<S>);
+pub struct ResponseWriter<S: Io> {
+    state: MessageState,
+    io: IoBuf<S>,
+}
 
 // TODO: Support responses to CONNECT and `Upgrade: websocket` requests.
 impl<S: Io> ResponseWriter<S> {
     /// Creates new response message by extracting needed fields from Head.
-    pub fn new(mut sock: IoBuf<S>, version: Version,
+    pub fn new(sock: IoBuf<S>, version: Version,
         is_head: bool, do_close: bool) -> ResponseWriter<S>
     {
         use base_serializer::Body::*;
 
-        // TODO(tailhook) while the following is very cheap in CPU usage,
-        // it costs useless 24 bytes of a closure size, might be optimized.
-        let buf = mem::replace(&mut sock.out_buf, Buf::new());
-
         // TODO(tailhook) implement Connection: Close,
         // (including explicit one in HTTP/1.0) and maybe others
-        ResponseWriter(Message(buf, MessageState::ResponseStart {
-            body: if is_head { Head } else { Normal },
-            version: version,
-            close: do_close || version == Version::Http10,
-        }), sock)
+        ResponseWriter {
+            state: MessageState::ResponseStart {
+                body: if is_head { Head } else { Normal },
+                version: version,
+                close: do_close || version == Version::Http10,
+            },
+            io: sock,
+        }
     }
     /// Returns true if it's okay to proceed with keep-alive connection
-    pub fn finish(self) -> bool {
+    pub fn finish(mut self) -> bool {
         use base_serializer::MessageState::*;
         use base_serializer::Body::*;
         if self.is_complete() {
             return true;
         }
-        let (mut buf, me) = self.0.decompose();
-        match me {
+        match self.state {
             // If response is not even started yet, send something to make
             // debugging easier
             ResponseStart { body: Denied, .. }
             | ResponseStart { body: Head, .. }
             => {
-                buf.extend(NOT_IMPLEMENTED_HEAD.as_bytes());
+                self.io.out_buf.extend(NOT_IMPLEMENTED_HEAD.as_bytes());
             }
             ResponseStart { body: Normal, .. } => {
-                buf.extend(NOT_IMPLEMENTED.as_bytes());
+                self.io.out_buf.extend(NOT_IMPLEMENTED.as_bytes());
             }
             _ => {}
         }
@@ -86,7 +85,7 @@ impl<S: Io> ResponseWriter<S> {
     /// When the response is already started. It's expected that your response
     /// handler state machine will never call the method twice.
     pub fn response_continue(&mut self) {
-        self.0.response_continue()
+        self.state.response_continue(&mut self.io.out_buf)
     }
 
     /// Write status line using `Status` enum
@@ -102,7 +101,8 @@ impl<S: Io> ResponseWriter<S> {
     /// When the status code is 100 (Continue). 100 is not allowed
     /// as a final status code.
     pub fn status(&mut self, status: Status) {
-        self.0.response_status(status.code(), status.reason())
+        self.state.response_status(&mut self.io.out_buf,
+            status.code(), status.reason())
     }
 
     /// Write custom status line
@@ -115,7 +115,7 @@ impl<S: Io> ResponseWriter<S> {
     /// When the status code is 100 (Continue). 100 is not allowed
     /// as a final status code.
     pub fn custom_status(&mut self, code: u16, reason: &str) {
-        self.0.response_status(code, reason)
+        self.state.response_status(&mut self.io.out_buf, code, reason)
     }
 
     /// Add a header to the message.
@@ -140,7 +140,7 @@ impl<S: Io> ResponseWriter<S> {
     pub fn add_header<V: AsRef<[u8]>>(&mut self, name: &str, value: V)
         -> Result<(), HeaderError>
     {
-        self.0.add_header(name, value.as_ref())
+        self.state.add_header(&mut self.io.out_buf, name, value.as_ref())
     }
 
     /// Same as `add_header` but allows value to be formatted directly into
@@ -151,7 +151,7 @@ impl<S: Io> ResponseWriter<S> {
     pub fn format_header<D: Display>(&mut self, name: &str, value: D)
         -> Result<(), HeaderError>
     {
-        self.0.format_header(name, value)
+        self.state.format_header(&mut self.io.out_buf, name, value)
     }
 
     /// Add a content length to the message.
@@ -166,7 +166,7 @@ impl<S: Io> ResponseWriter<S> {
     pub fn add_length(&mut self, n: u64)
         -> Result<(), HeaderError>
     {
-        self.0.add_length(n)
+        self.state.add_length(&mut self.io.out_buf, n)
     }
     /// Sets the transfer encoding to chunked.
     ///
@@ -180,14 +180,14 @@ impl<S: Io> ResponseWriter<S> {
     pub fn add_chunked(&mut self)
         -> Result<(), HeaderError>
     {
-        self.0.add_chunked()
+        self.state.add_chunked(&mut self.io.out_buf)
     }
     /// Returns true if at least `status()` method has been called
     ///
     /// This is mostly useful to find out whether we can build an error page
     /// or it's already too late.
     pub fn is_started(&self) -> bool {
-        self.0.is_started()
+        self.state.is_started()
     }
     /// Closes the HTTP header and returns `true` if entity body is expected.
     ///
@@ -201,7 +201,7 @@ impl<S: Io> ResponseWriter<S> {
     ///
     /// Panics when the response is in a wrong state.
     pub fn done_headers(&mut self) -> Result<bool, HeaderError> {
-        self.0.done_headers()
+        self.state.done_headers(&mut self.io.out_buf)
     }
     /// Write a chunk of the message body.
     ///
@@ -224,12 +224,12 @@ impl<S: Io> ResponseWriter<S> {
     /// determine response body length (either Content-Length or
     /// Transfer-Encoding).
     pub fn write_body(&mut self, data: &[u8]) {
-        self.0.write_body(data)
+        self.state.write_body(&mut self.io.out_buf, data)
     }
     /// Returns true if `done()` method is already called and everything
     /// was okay.
     pub fn is_complete(&self) -> bool {
-        self.0.is_complete()
+        self.state.is_complete()
     }
     /// Writes needed finalization data into the buffer and asserts
     /// that response is in the appropriate state for that.
@@ -240,10 +240,8 @@ impl<S: Io> ResponseWriter<S> {
     ///
     /// When the response is in the wrong state.
     pub fn done<E>(mut self) -> Finished<IoBuf<S>, E> {
-        self.0.done();
-        debug_assert!(self.1.out_buf.len() == 0);
-        self.1.out_buf = (self.0).0;
-        finished(self.1)
+        self.state.done(&mut self.io.out_buf);
+        finished(self.io)
     }
     /// Returns a future which yields a socket when the buffer is flushed to
     /// the socket
@@ -255,12 +253,9 @@ impl<S: Io> ResponseWriter<S> {
     /// # Panics
     ///
     /// Currently method panics when done_headers is not called yet
-    pub fn steal_socket(mut self) -> Flushed<S> {
-        assert!(self.0.is_after_headers());
-
-        debug_assert!(self.1.out_buf.len() == 0);
-        self.1.out_buf = (self.0).0;
-        self.1.flushed()
+    pub fn steal_socket(self) -> Flushed<S> {
+        assert!(self.state.is_after_headers());
+        self.io.flushed()
     }
 }
 

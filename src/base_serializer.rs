@@ -5,7 +5,8 @@ use std::fmt::Display;
 use std::io::Write;
 use std::ascii::AsciiExt;
 
-use netbuf::Buf;
+use tk_bufstream::Buf;
+
 
 use enums::Version;
 
@@ -45,10 +46,13 @@ quick_error! {
     }
 }
 
+/// This is a state of message that is fine both for requests and responses
+///
+/// Note: while we pass buffer to each method, we expect that the same buffer
+/// is passed each time
 #[derive(Debug)]
 pub enum MessageState {
     /// Nothing has been sent.
-    #[allow(dead_code)] // until we implement client requests
     ResponseStart { version: Version, body: Body, close: bool },
     /// A continuation line has been sent.
     FinalResponseStart { version: Version, body: Body, close: bool },
@@ -91,17 +95,11 @@ pub enum Body {
     Request,
 }
 
-/// Represents both request messages and response messages.
-///
-/// Specific wrappers are exposed in `server` and `client` modules.
-/// This type is private for the crate.
-pub struct Message(pub Buf, pub MessageState);
-
 fn invalid_header(value: &[u8]) -> bool {
     return value.iter().any(|&x| x == b'\r' || x == b'\n')
 }
 
-impl Message {
+impl MessageState {
     /// Write status line.
     ///
     /// This puts status line into a buffer immediately. If you don't
@@ -114,16 +112,17 @@ impl Message {
     ///
     /// When the status code is 100 (Continue). 100 is not allowed
     /// as a final status code.
-    pub fn response_status(&mut self, code: u16, reason: &str) {
+    pub fn response_status(&mut self, buf: &mut Buf, code: u16, reason: &str) {
         use self::Body::*;
         use self::MessageState::*;
-        match self.1 {
+        match *self {
             ResponseStart { version, mut body, close } |
             FinalResponseStart { version, mut body, close } => {
                 // 100 (Continue) interim status code is not allowed as
                 // a final response status.
                 assert!(code != 100);
-                write!(self.0, "{} {} {}\r\n", version, code, reason).unwrap();
+                write!(buf, "{} {} {}\r\n",
+                    version, code, reason).unwrap();
                 // Responses without body:
                 //
                 // * 1xx (Informational)
@@ -132,11 +131,11 @@ impl Message {
                 if (code >= 100 && code < 200) || code == 204 || code == 304 {
                     body = Denied
                 }
-                self.1 = Headers { body: body, close: close };
+                *self = Headers { body: body, close: close };
             }
             ref state => {
-                panic!("Called response_status() method on response in state {:?}",
-                       state)
+                panic!("Called response_status() method on response \
+                    in state {:?}", state)
             }
         }
     }
@@ -150,17 +149,18 @@ impl Message {
     ///
     /// When request line is already written. It's expected that your request
     /// handler state machine will never call the method twice.
-    #[allow(dead_code)] // until we implement client requests
-    pub fn request_line(&mut self, method: &str, path: &str, version: Version)
+    pub fn request_line(&mut self, buf: &mut Buf,
+        method: &str, path: &str, version: Version)
     {
         use self::Body::*;
         use self::MessageState::*;
-        match self.1 {
+        match *self {
             RequestStart => {
-                write!(self.0, "{} {} {}\r\n", method, path, version).unwrap();
+                write!(buf, "{} {} {}\r\n",
+                    method, path, version).unwrap();
                 // All requests may contain a body although it is uncommon for
                 // GET and HEAD requests to contain one.
-                self.1 = Headers { body: Request, close: false };
+                *self = Headers { body: Request, close: false };
             }
             ref state => {
                 panic!("Called request_line() method on request in state {:?}",
@@ -178,14 +178,14 @@ impl Message {
     ///
     /// When the response is already started. It's expected that your response
     /// handler state machine will never call the method twice.
-    pub fn response_continue(&mut self) {
+    pub fn response_continue(&mut self, buf: &mut Buf) {
         use self::MessageState::*;
-        match self.1 {
+        match *self {
             ResponseStart { version, body, close } => {
-                write!(self.0, "{} 100 Continue\r\n\r\n", version).unwrap();
-                self.1 = FinalResponseStart { version: version,
-                                              body: body,
-                                              close: close }
+                write!(buf, "{} 100 Continue\r\n\r\n", version).unwrap();
+                *self = FinalResponseStart { version: version,
+                                            body: body,
+                                            close: close }
             }
             ref state => {
                 panic!("Called continue_line() method on response in state {:?}",
@@ -194,45 +194,46 @@ impl Message {
         }
     }
 
-    fn write_header(&mut self, name: &str, value: &[u8])
+    fn write_header(&mut self, buf: &mut Buf, name: &str, value: &[u8])
         -> Result<(), HeaderError>
     {
         if invalid_header(name.as_bytes()) {
             return Err(HeaderError::InvalidHeaderName);
         }
-        let start = self.0.len();
-        self.0.write_all(name.as_bytes()).unwrap();
-        self.0.write_all(b": ").unwrap();
+        let start = buf.len();
+        buf.write_all(name.as_bytes()).unwrap();
+        buf.write_all(b": ").unwrap();
 
-        let value_start = self.0.len();
-        self.0.write_all(value).unwrap();
-        if invalid_header(&self.0[value_start..]) {
-            self.0.remove_range(start..);
+        let value_start = buf.len();
+        buf.write_all(value).unwrap();
+        if invalid_header(&buf[value_start..]) {
+            buf.remove_range(start..);
             return Err(HeaderError::InvalidHeaderValue);
         }
 
-        self.0.write_all(b"\r\n").unwrap();
+        buf.write_all(b"\r\n").unwrap();
         Ok(())
     }
 
-    fn write_formatted<D: Display>(&mut self, name: &str, value: D)
+    fn write_formatted<D: Display>(&mut self, buf: &mut Buf,
+        name: &str, value: D)
         -> Result<(), HeaderError>
     {
         if invalid_header(name.as_bytes()) {
             return Err(HeaderError::InvalidHeaderName);
         }
-        let start = self.0.len();
-        self.0.write_all(name.as_bytes()).unwrap();
-        self.0.write_all(b": ").unwrap();
+        let start = buf.len();
+        buf.write_all(name.as_bytes()).unwrap();
+        buf.write_all(b": ").unwrap();
 
-        let value_start = self.0.len();
-        write!(&mut self.0, "{}", value).unwrap();
-        if invalid_header(&self.0[value_start..]) {
-            self.0.remove_range(start..);
+        let value_start = buf.len();
+        write!(buf, "{}", value).unwrap();
+        if invalid_header(&buf[value_start..]) {
+            buf.remove_range(start..);
             return Err(HeaderError::InvalidHeaderValue);
         }
 
-        self.0.write_all(b"\r\n").unwrap();
+        buf.write_all(b"\r\n").unwrap();
         Ok(())
     }
 
@@ -255,7 +256,7 @@ impl Message {
     /// # Panics
     ///
     /// Panics when `add_header` is called in the wrong state.
-    pub fn add_header(&mut self, name: &str, value: &[u8])
+    pub fn add_header(&mut self, buf: &mut Buf, name: &str, value: &[u8])
         -> Result<(), HeaderError>
     {
         use self::MessageState::*;
@@ -264,9 +265,9 @@ impl Message {
             || name.eq_ignore_ascii_case("Transfer-Encoding") {
             return Err(BodyLengthHeader)
         }
-        match self.1 {
+        match *self {
             Headers { .. } | FixedHeaders { .. } | ChunkedHeaders { .. } => {
-                self.write_header(name, value)?;
+                self.write_header(buf, name, value)?;
                 Ok(())
             }
             ref state => {
@@ -281,7 +282,8 @@ impl Message {
     ///
     /// Useful for dates and numeric headers, as well as some strongly typed
     /// wrappers
-    pub fn format_header<D: Display>(&mut self, name: &str, value: D)
+    pub fn format_header<D: Display>(&mut self, buf: &mut Buf,
+        name: &str, value: D)
         -> Result<(), HeaderError>
     {
         use self::MessageState::*;
@@ -290,9 +292,9 @@ impl Message {
             || name.eq_ignore_ascii_case("Transfer-Encoding") {
             return Err(BodyLengthHeader)
         }
-        match self.1 {
+        match *self {
             Headers { .. } | FixedHeaders { .. } | ChunkedHeaders { .. } => {
-                self.write_formatted(name, value)?;
+                self.write_formatted(buf, name, value)?;
                 Ok(())
             }
             ref state => {
@@ -311,18 +313,18 @@ impl Message {
     /// # Panics
     ///
     /// Panics when `add_length` is called in the wrong state.
-    pub fn add_length(&mut self, n: u64)
+    pub fn add_length(&mut self, buf: &mut Buf, n: u64)
         -> Result<(), HeaderError> {
         use self::MessageState::*;
         use self::HeaderError::*;
         use self::Body::*;
-        match self.1 {
+        match *self {
             FixedHeaders { .. } => Err(DuplicateContentLength),
             ChunkedHeaders { .. } => Err(ContentLengthAfterTransferEncoding),
             Headers { body: Denied, .. } => Err(RequireBodyless),
             Headers { body, close } => {
-                self.write_formatted("Content-Length", n)?;
-                self.1 = FixedHeaders { is_head: body == Head,
+                self.write_formatted(buf, "Content-Length", n)?;
+                *self = FixedHeaders { is_head: body == Head,
                                         close: close,
                                         content_length: n };
                 Ok(())
@@ -343,18 +345,18 @@ impl Message {
     /// # Panics
     ///
     /// Panics when `add_chunked` is called in the wrong state.
-    pub fn add_chunked(&mut self)
+    pub fn add_chunked(&mut self, buf: &mut Buf)
         -> Result<(), HeaderError> {
             use self::MessageState::*;
             use self::HeaderError::*;
             use self::Body::*;
-            match self.1 {
+            match *self {
                 FixedHeaders { .. } => Err(TransferEncodingAfterContentLength),
                 ChunkedHeaders { .. } => Err(DuplicateTransferEncoding),
                 Headers { body: Denied, .. } => Err(RequireBodyless),
                 Headers { body, close } => {
-                    self.write_header("Transfer-Encoding", b"chunked")?;
-                    self.1 = ChunkedHeaders { is_head: body == Head,
+                    self.write_header(buf, "Transfer-Encoding", b"chunked")?;
+                    *self = ChunkedHeaders { is_head: body == Head,
                                               close: close };
                     Ok(())
                 }
@@ -370,7 +372,7 @@ impl Message {
     /// This is mostly useful to find out whether we can build an error page
     /// or it's already too late.
     pub fn is_started(&self) -> bool {
-        !matches!(self.1,
+        !matches!(*self,
             MessageState::RequestStart |
             MessageState::ResponseStart { .. } |
             MessageState::FinalResponseStart { .. })
@@ -387,34 +389,36 @@ impl Message {
     /// # Panics
     ///
     /// Panics when the response is in a wrong state.
-    pub fn done_headers(&mut self) -> Result<bool, HeaderError> {
+    pub fn done_headers(&mut self, buf: &mut Buf)
+        -> Result<bool, HeaderError>
+    {
         use self::Body::*;
         use self::MessageState::*;
-        if matches!(self.1,
+        if matches!(*self,
                     Headers { close: true, .. } |
                     FixedHeaders { close: true, .. } |
                     ChunkedHeaders { close: true, .. }) {
-            self.add_header("Connection", b"close").unwrap();
+            self.add_header(buf, "Connection", b"close").unwrap();
         }
-        let expect_body = match self.1 {
+        let expect_body = match *self {
             Headers { body: Denied, .. } => {
-                self.1 = Bodyless;
+                *self = Bodyless;
                 false
             }
             Headers { body: Request, .. } => {
-                self.1 = FixedBody { is_head: false, content_length: 0 };
+                *self = FixedBody { is_head: false, content_length: 0 };
                 true
             }
             Headers { body: Normal, .. } => {
                 return Err(HeaderError::CantDetermineBodySize);
             }
             FixedHeaders { is_head, content_length, .. } => {
-                self.1 = FixedBody { is_head: is_head,
+                *self = FixedBody { is_head: is_head,
                                      content_length: content_length };
                 !is_head
             }
             ChunkedHeaders { is_head, .. } => {
-                self.1 = ChunkedBody { is_head: is_head };
+                *self = ChunkedBody { is_head: is_head };
                 !is_head
             }
             ref state => {
@@ -422,7 +426,7 @@ impl Message {
                        state)
             }
         };
-        self.0.write(b"\r\n").unwrap();
+        buf.write(b"\r\n").unwrap();
         Ok(expect_body)
     }
 
@@ -446,9 +450,9 @@ impl Message {
     /// When response is in wrong state. Or there is no headers which
     /// determine response body length (either Content-Length or
     /// Transfer-Encoding).
-    pub fn write_body(&mut self, data: &[u8]) {
+    pub fn write_body(&mut self, buf: &mut Buf, data: &[u8]) {
         use self::MessageState::*;
-        match self.1 {
+        match *self {
             Bodyless => panic!("Message must not contain body."),
             FixedBody { is_head, ref mut content_length } => {
                 if data.len() as u64 > *content_length {
@@ -457,14 +461,14 @@ impl Message {
                         content_length, data.len());
                 }
                 if !is_head {
-                    self.0.write(data).unwrap();
+                    buf.write(data).unwrap();
                 }
                 *content_length -= data.len() as u64;
             }
             ChunkedBody { is_head } => if !is_head && data.len() > 0 {
-                write!(self.0, "{:x}\r\n", data.len()).unwrap();
-                self.0.write(data).unwrap();
-                self.0.write(b"\r\n").unwrap();
+                write!(buf, "{:x}\r\n", data.len()).unwrap();
+                buf.write(data).unwrap();
+                buf.write(b"\r\n").unwrap();
             },
             ref state => {
                 panic!("Called write_body() method on message \
@@ -475,13 +479,13 @@ impl Message {
     /// Returns true if headers are already sent (buffered)
     pub fn is_after_headers(&self) -> bool {
         use self::MessageState::*;
-        matches!(self.1, Bodyless | Done |
+        matches!(*self, Bodyless | Done |
             FixedBody {..} | ChunkedBody {..})
     }
 
     /// Returns true if `done()` method is already called-
     pub fn is_complete(&self) -> bool {
-        matches!(self.1, MessageState::Done)
+        matches!(*self, MessageState::Done)
     }
 
     /// Writes needed finalization data into the buffer and asserts
@@ -492,20 +496,20 @@ impl Message {
     /// # Panics
     ///
     /// When the message is in the wrong state or the body is not finished.
-    pub fn done(&mut self) {
+    pub fn done(&mut self, buf: &mut Buf) {
         use self::MessageState::*;
-        match self.1 {
-            Bodyless => self.1 = Done,
+        match *self {
+            Bodyless => *self = Done,
             // Don't check for responses to HEAD requests if body was actually sent.
-            FixedBody {is_head: true, .. } |
-            ChunkedBody { is_head: true } => self.1 = Done,
-            FixedBody { is_head: false, content_length: 0 } => self.1 = Done,
+            FixedBody { is_head: true, .. } |
+            ChunkedBody { is_head: true } => *self = Done,
+            FixedBody { is_head: false, content_length: 0 } => *self = Done,
             FixedBody { is_head: false, content_length } =>
                 panic!("Tried to close message with {} bytes remaining.",
                        content_length),
             ChunkedBody { is_head: false } => {
-                self.0.write(b"0\r\n\r\n").unwrap();
-                self.1 = Done;
+                buf.write(b"0\r\n\r\n").unwrap();
+                *self = Done;
             }
             Done => {}  // multiple invocations are okay.
             ref state => {
@@ -514,17 +518,13 @@ impl Message {
             }
         }
     }
-
-    pub fn decompose(self) -> (Buf, MessageState) {
-        (self.0, self.1)
-    }
 }
 
 #[cfg(test)]
 mod test {
-    use netbuf::Buf;
+    use tk_bufstream::{Buf};
 
-    use super::{Message, MessageState, Body};
+    use super::{MessageState, Body};
     use enums::Version;
 
     #[test]
@@ -534,105 +534,111 @@ mod test {
     }
 
     fn do_request<F>(fun: F) -> Buf
-        where F: FnOnce(Message) -> Buf
+        where F: FnOnce(MessageState, &mut Buf)
     {
-        fun(Message(Buf::new(), MessageState::RequestStart))
+        let mut buf = Buf::new();
+        fun(MessageState::RequestStart, &mut buf);
+        buf
     }
-    fn do_response10<F: FnOnce(Message) -> Buf>(fun: F) -> Buf {
-        fun(Message(Buf::new(), MessageState::ResponseStart {
+    fn do_response10<F>(fun: F) -> Buf
+        where F: FnOnce(MessageState, &mut Buf)
+    {
+        let mut buf = Buf::new();
+        fun(MessageState::ResponseStart {
             version: Version::Http10,
             body: Body::Normal,
             close: false,
-        }))
+        }, &mut buf);
+        buf
     }
-    fn do_response11<F: FnOnce(Message) -> Buf>(close: bool, fun: F) -> Buf {
-        fun(Message(Buf::new(), MessageState::ResponseStart {
+    fn do_response11<F>(close: bool, fun: F) -> Buf
+        where F: FnOnce(MessageState, &mut Buf)
+    {
+        let mut buf = Buf::new();
+        fun(MessageState::ResponseStart {
             version: Version::Http11,
             body: Body::Normal,
             close: close,
-        }))
+        }, &mut buf);
+        buf
     }
 
-    fn do_head_response11<F: FnOnce(Message) -> Buf>(close: bool, fun: F)
+    fn do_head_response11<F>(close: bool, fun: F)
         -> Buf
+        where F: FnOnce(MessageState, &mut Buf)
     {
-        fun(Message(Buf::new(), MessageState::ResponseStart {
+        let mut buf = Buf::new();
+        fun(MessageState::ResponseStart {
             version: Version::Http11,
             body: Body::Head,
             close: close,
-        }))
+        }, &mut buf);
+        buf
     }
 
     #[test]
     fn minimal_request() {
-        assert_eq!(&do_request(|mut msg| {
-            msg.request_line("GET", "/", Version::Http10);
-            msg.done_headers().unwrap();
-            msg.0
+        assert_eq!(&do_request(|mut msg, buf| {
+            msg.request_line(buf, "GET", "/", Version::Http10);
+            msg.done_headers(buf).unwrap();
         })[..], "GET / HTTP/1.0\r\n\r\n".as_bytes());
     }
 
     #[test]
     fn minimal_response() {
-        assert_eq!(&do_response10(|mut msg| {
-            msg.response_status(200, "OK");
-            msg.add_length(0).unwrap();
-            msg.done_headers().unwrap();
-            msg.0
+        assert_eq!(&do_response10(|mut msg, buf| {
+            msg.response_status(buf, 200, "OK");
+            msg.add_length(buf, 0).unwrap();
+            msg.done_headers(buf).unwrap();
         })[..], "HTTP/1.0 200 OK\r\nContent-Length: 0\r\n\r\n".as_bytes());
     }
 
     #[test]
     fn minimal_response11() {
-        assert_eq!(&do_response11(false, |mut msg| {
-            msg.response_status(200, "OK");
-            msg.add_length(0).unwrap();
-            msg.done_headers().unwrap();
-            msg.0
+        assert_eq!(&do_response11(false, |mut msg, buf| {
+            msg.response_status(buf, 200, "OK");
+            msg.add_length(buf, 0).unwrap();
+            msg.done_headers(buf, ).unwrap();
         })[..], "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".as_bytes());
     }
 
     #[test]
     fn close_response11() {
-        assert_eq!(&do_response11(true, |mut msg| {
-            msg.response_status(200, "OK");
-            msg.add_length(0).unwrap();
-            msg.done_headers().unwrap();
-            msg.0
+        assert_eq!(&do_response11(true, |mut msg, buf| {
+            msg.response_status(buf, 200, "OK");
+            msg.add_length(buf, 0).unwrap();
+            msg.done_headers(buf).unwrap();
         })[..], concat!("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n",
                         "Connection: close\r\n\r\n").as_bytes());
     }
 
     #[test]
     fn head_request() {
-        assert_eq!(&do_request(|mut msg| {
-            msg.request_line("HEAD", "/", Version::Http11);
-            msg.add_length(5).unwrap();
-            msg.done_headers().unwrap();
-            msg.write_body(b"Hello");
-            msg.0
+        assert_eq!(&do_request(|mut msg, buf| {
+            msg.request_line(buf, "HEAD", "/", Version::Http11);
+            msg.add_length(buf, 5).unwrap();
+            msg.done_headers(buf, ).unwrap();
+            msg.write_body(buf, b"Hello");
         })[..], "HEAD / HTTP/1.1\r\nContent-Length: 5\r\n\r\nHello".as_bytes());
     }
 
     #[test]
     fn head_response() {
         // The response to a HEAD request may contain the real body length.
-        assert_eq!(&do_head_response11(false, |mut msg| {
-            msg.response_status(200, "OK");
-            msg.add_length(500).unwrap();
-            msg.done_headers().unwrap();
-            msg.0
+        assert_eq!(&do_head_response11(false, |mut msg, buf| {
+            msg.response_status(buf, 200, "OK");
+            msg.add_length(buf, 500).unwrap();
+            msg.done_headers(buf).unwrap();
         })[..], "HTTP/1.1 200 OK\r\nContent-Length: 500\r\n\r\n".as_bytes());
     }
 
     #[test]
     fn informational_response() {
         // No response with an 1xx status code may contain a body length.
-        assert_eq!(&do_response11(false, |mut msg| {
-            msg.response_status(142, "Foo");
-            msg.add_length(500).unwrap_err();
-            msg.done_headers().unwrap();
-            msg.0
+        assert_eq!(&do_response11(false, |mut msg, buf| {
+            msg.response_status(buf, 142, "Foo");
+            msg.add_length(buf, 500).unwrap_err();
+            msg.done_headers(buf).unwrap();
         })[..], "HTTP/1.1 142 Foo\r\n\r\n".as_bytes());
     }
 }
