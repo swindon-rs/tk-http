@@ -78,6 +78,7 @@ mod lambda;
 mod simple_error_page;
 mod serve;
 mod base_serializer;
+mod opt_future;
 
 use std::net::SocketAddr;
 
