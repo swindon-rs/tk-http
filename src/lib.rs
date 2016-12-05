@@ -56,6 +56,7 @@
 //! ```
 
 extern crate futures;
+extern crate url;
 extern crate httparse;
 extern crate tokio_core;
 extern crate tokio_service;
@@ -64,9 +65,10 @@ extern crate tk_bufstream;
 #[macro_use(quick_error)] extern crate quick_error;
 #[macro_use] extern crate matches;
 #[macro_use] extern crate log;
-// Use curl/tokio-curl until own implementation.
-extern crate tokio_curl;
-extern crate curl;
+// These ones for "simple" interface
+extern crate abstract_ns;
+extern crate futures_cpupool;
+extern crate ns_std_threaded;
 
 
 pub mod request;
@@ -75,6 +77,7 @@ pub mod enums;
 pub mod client;
 mod error;
 mod lambda;
+mod headers;
 mod simple_error_page;
 mod serve;
 mod base_serializer;
@@ -94,6 +97,7 @@ pub use error::Error;
 pub use serve::{GenericResponse, ResponseWriter};
 pub use lambda::ResponseFn;
 pub use simple_error_page::SimpleErrorPage;
+pub use opt_future::OptFuture;
 
 
 /// Bind to address and start serving the service
