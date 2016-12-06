@@ -17,7 +17,7 @@ pub use self::errors::Error;
 pub use self::client::{Client, Codec, Head};
 pub use self::encoder::{Encoder, EncoderDone};
 
-/// Fine-grained configuration of the HTTP request
+/// Fine-grained configuration of the HTTP connection
 #[derive(Debug, Clone)]
 pub struct Config {
     inflight_request_limit: usize,
