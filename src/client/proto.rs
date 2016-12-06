@@ -25,6 +25,10 @@ enum InState<S: Io, C: Codec<S>> {
     Void,
 }
 
+/// A low-level HTTP/1.x protocol handler
+///
+/// Note, most of the time you need some reconnection facility and/or
+/// connection pooling on top of this interface
 pub struct Proto<S: Io, C: Codec<S>> {
     writing: OutState<S>,
     waiting: VecDeque<(C, Arc<AtomicUsize>)>,
@@ -35,6 +39,9 @@ pub struct Proto<S: Io, C: Codec<S>> {
 
 
 impl<S: Io, C: Codec<S>> Proto<S, C> {
+    /// Create a new protocol implementation from a TCP connection and a config
+    ///
+    /// You should use this protocol as a `Sink`
     pub fn new(conn: S, cfg: &Arc<Config>) -> Proto<S, C> {
         let (cout, cin) = IoBuf::new(conn).split();
         return Proto {
