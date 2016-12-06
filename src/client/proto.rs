@@ -10,7 +10,7 @@ use futures::{Future, AsyncSink, Async, Sink, StartSend, Poll};
 use OptFuture;
 use client::parser::Parser;
 use client::encoder::{self, get_inner};
-use client::{Codec, Error, EncoderDone};
+use client::{Codec, Error, EncoderDone, Config};
 
 
 enum OutState<S: Io> {
@@ -30,17 +30,19 @@ pub struct Proto<S: Io, C: Codec<S>> {
     waiting: VecDeque<(C, Arc<AtomicUsize>)>,
     reading: InState<S, C>,
     close: Arc<AtomicBool>,
+    config: Arc<Config>,
 }
 
 
 impl<S: Io, C: Codec<S>> Proto<S, C> {
-    pub fn new(conn: S) -> Proto<S, C> {
+    pub fn new(conn: S, cfg: &Arc<Config>) -> Proto<S, C> {
         let (cout, cin) = IoBuf::new(conn).split();
         return Proto {
             writing: OutState::Idle(cout),
-            waiting: VecDeque::new(),
+            waiting: VecDeque::with_capacity(cfg.inflight_request_prealloc),
             reading: InState::Idle(cin),
             close: Arc::new(AtomicBool::new(false)),
+            config: cfg.clone(),
         }
     }
 }
@@ -58,27 +60,36 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
                     io.flush()?;
                     (AsyncSink::NotReady(item), OutState::Idle(io))
                 } else {
-                    // TODO(tailhook) check if there are too many waiting
-                    let state = Arc::new(AtomicUsize::new(0));
-                    let (r, st) =
-                        match item.start_write(encoder::new(io,
-                            state.clone(), self.close.clone()))
-                        {
-                            OptFuture::Value(Ok(done)) => {
-                                (AsyncSink::Ready,
-                                 OutState::Idle(get_inner(done)))
-                            }
-                            // Note we break connection if serializer errored,
-                            // because we don't actually know if connection
-                            // can be reused safefully in this case
-                            OptFuture::Value(Err(e)) => return Err(e),
-                            OptFuture::Future(fut) => {
-                                (AsyncSink::Ready, OutState::Write(fut))
-                            }
-                            OptFuture::Done => unreachable!(),
-                        };
-                    self.waiting.push_back((item, state));
-                    (r, st)
+                    let mut limit = self.config.inflight_request_limit;
+                    if matches!(self.reading, InState::Read(..)) {
+                        limit -= 1;
+                    }
+                    if self.waiting.len() >= limit {
+                        (AsyncSink::NotReady(item), OutState::Idle(io))
+                    } else {
+                        // TODO(tailhook) check if there are too many waiting
+                        let state = Arc::new(AtomicUsize::new(0));
+                        let (r, st) =
+                            match item.start_write(encoder::new(io,
+                                state.clone(), self.close.clone()))
+                            {
+                                OptFuture::Value(Ok(done)) => {
+                                    (AsyncSink::Ready,
+                                     OutState::Idle(get_inner(done)))
+                                }
+                                // Note we break connection if serializer
+                                // errored, because we don't actually know if
+                                // connection can be reused safefully in this
+                                // case
+                                OptFuture::Value(Err(e)) => return Err(e),
+                                OptFuture::Future(fut) => {
+                                    (AsyncSink::Ready, OutState::Write(fut))
+                                }
+                                OptFuture::Done => unreachable!(),
+                            };
+                        self.waiting.push_back((item, state));
+                        (r, st)
+                    }
                 }
             }
             OutState::Write(fut) => {

@@ -1,4 +1,5 @@
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::sync::Arc;
 
 use url::{Url, Host};
 use futures::{IntoFuture, Future, Sink};
@@ -12,6 +13,7 @@ use {OptFuture};
 use client::errors::Error;
 use client::proto::Proto;
 use client::buffered::{Buffered, Response};
+use client::Config;
 
 
 /// This is a simplistic function to just do a GET request for an url
@@ -56,7 +58,7 @@ pub fn fetch_once_buffered(url: Url, handle: &Handle)
         TcpStream::connect(&addr, &handle).map_err(Error::Io)
     }).and_then(|sock| {
         let (codec, receiver) = Buffered::get(url);
-        let proto = Proto::new(sock);
+        let proto = Proto::new(sock, &Arc::new(Config::new()));
         proto.send(codec)
         .map(|_| -> Response { unreachable!() })
         .select(receiver.map_err(|_| -> Error { unimplemented!() }))

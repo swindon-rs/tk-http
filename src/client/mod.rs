@@ -6,6 +6,7 @@ mod client;
 mod encoder;
 mod proto;
 mod parser;
+mod config;
 pub mod buffered;
 
 // utils, move to another crate(s)
@@ -15,3 +16,11 @@ pub use self::simple::fetch_once_buffered;
 pub use self::errors::Error;
 pub use self::client::{Client, Codec, Head};
 pub use self::encoder::{Encoder, EncoderDone};
+
+/// Fine-grained configuration of the HTTP request
+#[derive(Debug, Clone)]
+pub struct Config {
+    inflight_request_limit: usize,
+    inflight_request_prealloc: usize,
+}
+
