@@ -1,3 +1,4 @@
+
 use std::io;
 
 use httparse::Error as HttpError;
@@ -57,6 +58,18 @@ quick_error! {
         PrematureResponseHeaders {
             description("response headers received \
                          before request has been written")
+        }
+        /// This means connection is busy (over the limit or not yet
+        /// established when trying to send request
+        Busy {
+            description("request can't be sent because connection is busy")
+        }
+        /// The channel for receiving response is canceled. This probably means
+        /// that connection to server was closed before being able to fulfil
+        /// the request. But it's unlikely that this error is related to this
+        /// request itself.
+        Canceled {
+            description("request canceled")
         }
         /// Connection closed normally
         ///

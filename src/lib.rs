@@ -54,6 +54,7 @@
 //!     lp.run(futures::empty::<(), ()>()).unwrap();
 //! }
 //! ```
+#![recursion_limit="100"]
 
 extern crate futures;
 extern crate url;

@@ -1,9 +1,10 @@
 use futures::sink::Sink;
-use futures::Async;
+use futures::{Async, AsyncSink, BoxFuture, Future};
 use tokio_core::io::Io;
 use httparse::Header;
 
 use client::{Error, Encoder, EncoderDone};
+use client::buffered;
 use enums::Version;
 use {OptFuture};
 
@@ -131,5 +132,23 @@ pub trait Codec<S: Io> {
 /// It may apply to a single connection or connection pool
 ///
 /// (We're not sure of whether we keep this trait or just use Sink directly)
-pub trait Client<C: Codec<S>, S: Io>: Sink<SinkItem=C, SinkError=Error> {
+pub trait Client<S: Io>: Sink<SinkItem=Box<Codec<S>>, SinkError=Error> {
+    fn fetch_url(&mut self, url: &str)
+        -> OptFuture<buffered::Response, Error>
+    {
+        let url = url.parse().unwrap(); // TODO(tailhook)
+        let (codec, receiver) = buffered::Buffered::get(url);
+        match self.start_send(Box::new(codec)) {
+            Ok(AsyncSink::NotReady(x)) => {
+                OptFuture::Value(Err(Error::Busy))
+            }
+            Ok(AsyncSink::Ready) => {
+                OptFuture::Future(
+                    receiver.map_err(|_| Error::Canceled).boxed())
+            }
+            Err(e) => {
+                OptFuture::Value(Err(e.into()))
+            }
+        }
+    }
 }
