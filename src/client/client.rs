@@ -152,3 +152,7 @@ pub trait Client<S: Io>: Sink<SinkItem=Box<Codec<S>>, SinkError=Error> {
         }
     }
 }
+
+impl<T, S: Io> Client<S> for T
+    where T: Sink<SinkItem=Box<Codec<S>>, SinkError=Error>
+{ }
