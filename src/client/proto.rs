@@ -158,19 +158,15 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
                 break;
             }
         }
-        // Temporarily return Ready so that `Sink::send` works as expected
-        //if self.waiting.len() == 0 &&
-        //        matches!(self.writing, OutState::Idle(_)) &&
-        //        matches!(self.reading, InState::Idle(_))
-        //{
-        //    return Ok(Async::Ready(()));
-        //} else {
-        //    return Ok(Async::NotReady);
-        //}
-
-        // We never return ready as we don't care for flush() combinator
-        // Also we wan't timeouts on idle keep-alive connections
-        // TODO(tailhook) implement timeouts
-        return Ok(Async::NotReady);
+        // Basically we return Ready when there are no in-flight requests,
+        // which means we can shutdown connection safefully.
+        if self.waiting.len() == 0 &&
+                matches!(self.writing, OutState::Idle(_)) &&
+                matches!(self.reading, InState::Idle(_))
+        {
+            return Ok(Async::Ready(()));
+        } else {
+            return Ok(Async::NotReady);
+        }
     }
 }
