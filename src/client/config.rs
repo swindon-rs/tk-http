@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use client::{Config};
 
 impl Config {
@@ -23,5 +25,11 @@ impl Config {
     pub fn inflight_request_prealoc(&mut self, value: usize) -> &mut Self {
         self.inflight_request_prealloc = value;
         self
+    }
+    /// Create a Arc'd confgi clone to pass to the constructor
+    ///
+    /// This is just a convenience method.
+    pub fn done(&mut self) -> Arc<Config> {
+        Arc::new(self.clone())
     }
 }
