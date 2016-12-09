@@ -1,5 +1,5 @@
 use futures::sink::Sink;
-use futures::{Async, AsyncSink, BoxFuture, Future};
+use futures::{Async, AsyncSink, Future};
 use tokio_core::io::Io;
 use httparse::Header;
 
@@ -159,11 +159,11 @@ pub trait Client<S: Io>: Sink<SinkItem=Box<Codec<S>>> {
     {
         let url = match url.parse() {
             Ok(u) => u,
-            Err(e) => return OptFuture::Value(Err(Error::InvalidUrl)),
+            Err(_) => return OptFuture::Value(Err(Error::InvalidUrl)),
         };
         let (codec, receiver) = buffered::Buffered::get(url);
         match self.start_send(Box::new(codec)) {
-            Ok(AsyncSink::NotReady(x)) => {
+            Ok(AsyncSink::NotReady(_)) => {
                 OptFuture::Value(Err(Error::Busy.into()))
             }
             Ok(AsyncSink::Ready) => {

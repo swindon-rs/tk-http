@@ -9,9 +9,6 @@ mod parser;
 mod config;
 pub mod buffered;
 
-// utils, move to another crate(s)
-mod connect;
-
 pub use self::simple::fetch_once_buffered;
 pub use self::errors::Error;
 pub use self::client::{Client, Codec, Head};

@@ -1,6 +1,5 @@
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::sync::Arc;
-use std::time::Duration;
 
 use url::{Url, Host};
 use futures::{IntoFuture, Future, Sink};
@@ -9,7 +8,6 @@ use futures_cpupool::CpuPool;
 use ns_std_threaded::ThreadedResolver;
 use tokio_core::reactor::Handle;
 use tokio_core::net::TcpStream;
-use tokio_core::reactor::Timeout;
 
 use {OptFuture};
 use client::errors::Error;
