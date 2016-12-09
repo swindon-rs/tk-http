@@ -130,15 +130,15 @@ impl<S: Io> Codec<S> for Box<Codec<S>> {
     fn start_write(&mut self, e: Encoder<S>)
         -> OptFuture<EncoderDone<S>, Error>
     {
-        (*self).start_write(e)
+        (**self).start_write(e)
     }
     fn headers_received(&mut self, headers: &Head) -> Result<RecvMode, Error> {
-        (*self).headers_received(headers)
+        (**self).headers_received(headers)
     }
     fn data_received(&mut self, data: &[u8], end: bool)
         -> Result<Async<usize>, Error>
     {
-        (*self).data_received(data, end)
+        (**self).data_received(data, end)
     }
 }
 
