@@ -78,5 +78,9 @@ quick_error! {
         Closed {
             description("connection closed normally")
         }
+        /// Invalid URL specified
+        InvalidUrl {
+            description("requesting an invalid url")
+        }
     }
 }

@@ -25,7 +25,7 @@ use client::client::RecvMode;
 pub struct Buffered {
     method: &'static str,
     url: Url,
-    sender: Option<Sender<Response>>,
+    sender: Option<Sender<Result<Response, Error>>>,
     response: Option<Response>,
     max_response_length: usize,
 }
@@ -82,13 +82,13 @@ impl<S: Io> Codec<S> for Buffered {
         assert!(end);
         let mut response = self.response.take().unwrap();
         response.body = Some(data.to_vec());
-        self.sender.take().unwrap().complete(response);
+        self.sender.take().unwrap().complete(Ok(response));
         Ok(Async::Ready(data.len()))
     }
 }
 
 impl Buffered {
-    pub fn get(url: Url) -> (Buffered, Receiver<Response>) {
+    pub fn get(url: Url) -> (Buffered, Receiver<Result<Response, Error>>) {
         let (tx, rx) = channel();
         (Buffered {
                 method: "GET",

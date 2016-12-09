@@ -144,22 +144,34 @@ impl<S: Io> Codec<S> for Box<Codec<S>> {
 
 /// A marker trait that applies to a Sink that is essentially a HTTP client
 ///
-/// It may apply to a single connection or connection pool
+/// It may apply to a single connection or a connection pool. For a single
+/// connection the `client::Proto` implements this interface.
 ///
-/// (We're not sure of whether we keep this trait or just use Sink directly)
-pub trait Client<S: Io>: Sink<SinkItem=Box<Codec<S>>, SinkError=Error> {
+/// We expect a boxed codec here because we assume that different kinds of
+/// requests may be executed though same connection pool. If you want to avoid
+/// boxing or have fine grained control, use `Proto` (which is a `Sink`)
+/// directly.
+///
+pub trait Client<S: Io>: Sink<SinkItem=Box<Codec<S>>> {
     fn fetch_url(&mut self, url: &str)
         -> OptFuture<buffered::Response, Error>
+        where <Self as Sink>::SinkError: Into<Error>
     {
-        let url = url.parse().unwrap(); // TODO(tailhook)
+        let url = match url.parse() {
+            Ok(u) => u,
+            Err(e) => return OptFuture::Value(Err(Error::InvalidUrl)),
+        };
         let (codec, receiver) = buffered::Buffered::get(url);
         match self.start_send(Box::new(codec)) {
             Ok(AsyncSink::NotReady(x)) => {
-                OptFuture::Value(Err(Error::Busy))
+                OptFuture::Value(Err(Error::Busy.into()))
             }
             Ok(AsyncSink::Ready) => {
                 OptFuture::Future(
-                    receiver.map_err(|_| Error::Canceled).boxed())
+                    receiver
+                    .map_err(|_| Error::Canceled.into())
+                    .and_then(|res| res)
+                    .boxed())
             }
             Err(e) => {
                 OptFuture::Value(Err(e.into()))
@@ -169,5 +181,5 @@ pub trait Client<S: Io>: Sink<SinkItem=Box<Codec<S>>, SinkError=Error> {
 }
 
 impl<T, S: Io> Client<S> for T
-    where T: Sink<SinkItem=Box<Codec<S>>, SinkError=Error>
+    where T: Sink<SinkItem=Box<Codec<S>>>
 { }
