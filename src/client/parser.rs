@@ -315,8 +315,11 @@ impl<S: Io, C: Codec<S>> Parser<S, C> {
                         None
                     };
                     match operation {
-                        Some(Async::Ready(bytes)) => {
-                            progress.consume(&mut io, bytes);
+                        Some(Async::Ready(consumed)) => {
+                            progress.consume(&mut io, consumed);
+                            if done && consumed == bytes {
+                                return Ok(Async::Ready(()));
+                            }
                         }
                         Some(Async::NotReady) => {
                             if matches!(*mode, Progressive(x) if x > bytes) {
