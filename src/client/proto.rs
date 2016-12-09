@@ -91,26 +91,24 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
                     if self.waiting.len() >= limit {
                         (AsyncSink::NotReady(item), OutState::Idle(io))
                     } else {
-                        // TODO(tailhook) check if there are too many waiting
                         let state = Arc::new(AtomicUsize::new(0));
-                        let (r, st) =
-                            match item.start_write(encoder::new(io,
-                                state.clone(), self.close.clone()))
-                            {
-                                OptFuture::Value(Ok(done)) => {
-                                    (AsyncSink::Ready,
-                                     OutState::Idle(get_inner(done)))
-                                }
-                                // Note we break connection if serializer
-                                // errored, because we don't actually know if
-                                // connection can be reused safefully in this
-                                // case
-                                OptFuture::Value(Err(e)) => return Err(e),
-                                OptFuture::Future(fut) => {
-                                    (AsyncSink::Ready, OutState::Write(fut))
-                                }
-                                OptFuture::Done => unreachable!(),
-                            };
+                        let e = encoder::new(io,
+                                state.clone(), self.close.clone());
+                        let (r, st) = match item.start_write(e) {
+                            OptFuture::Value(Ok(done)) => {
+                                (AsyncSink::Ready,
+                                 OutState::Idle(get_inner(done)))
+                            }
+                            // Note we break connection if serializer
+                            // errored, because we don't actually know if
+                            // connection can be reused safefully in this
+                            // case
+                            OptFuture::Value(Err(e)) => return Err(e),
+                            OptFuture::Future(fut) => {
+                                (AsyncSink::Ready, OutState::Write(fut))
+                            }
+                            OptFuture::Done => unreachable!(),
+                        };
                         self.waiting.push_back((item, state));
                         (r, st)
                     }
