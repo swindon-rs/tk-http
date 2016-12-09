@@ -2,9 +2,12 @@ use std::mem;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::collections::VecDeque;
+use std::net::SocketAddr;
 
 use tk_bufstream::{IoBuf, WriteBuf, ReadBuf};
 use tokio_core::io::Io;
+use tokio_core::net::TcpStream;
+use tokio_core::reactor::Handle;
 use futures::{Future, AsyncSink, Async, Sink, StartSend, Poll};
 
 use OptFuture;
@@ -51,6 +54,20 @@ impl<S: Io, C: Codec<S>> Proto<S, C> {
             close: Arc::new(AtomicBool::new(false)),
             config: cfg.clone(),
         }
+    }
+}
+impl<C: Codec<TcpStream>> Proto<TcpStream, C> {
+    /// A convenience method to establish connection and create a protocol
+    /// instance
+    pub fn connect_tcp(addr: SocketAddr, cfg: &Arc<Config>, handle: &Handle)
+        -> Box<Future<Item=Self, Error=Error>>
+    {
+        let cfg = cfg.clone();
+        Box::new(
+            TcpStream::connect(&addr, &handle)
+            .map(move |c| Proto::new(c, &cfg))
+            .map_err(Error::Io))
+        as Box<Future<Item=_, Error=_>>
     }
 }
 
