@@ -1,6 +1,7 @@
 
 use std::io;
 
+use futures::sync::mpsc::SendError;
 use httparse::Error as HttpError;
 use httparse::InvalidChunkSize;
 use abstract_ns::Error as NsError;
@@ -82,5 +83,15 @@ quick_error! {
         InvalidUrl {
             description("requesting an invalid url")
         }
+        /// Error sending a request to a connection pool
+        PoolError {
+            description("error sending a request to a connection pool")
+        }
+    }
+}
+
+impl<T> From<SendError<T>> for Error {
+    fn from(_: SendError<T>) -> Error {
+        Error::PoolError
     }
 }
