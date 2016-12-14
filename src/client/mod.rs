@@ -11,7 +11,7 @@ pub mod buffered;
 
 pub use self::simple::fetch_once_buffered;
 pub use self::errors::Error;
-pub use self::client::{Client, Codec, Head};
+pub use self::client::{Client, Codec, Head, RecvMode};
 pub use self::encoder::{Encoder, EncoderDone};
 pub use self::proto::{Proto};
 
