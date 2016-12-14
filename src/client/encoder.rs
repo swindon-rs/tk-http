@@ -146,6 +146,24 @@ impl<S: Io> Encoder<S> {
         self.message.done_headers(&mut self.buf.out_buf)
         .map(|always_support_body| assert!(always_support_body))
     }
+    /// Write a chunk of body
+    ///
+    /// If `add_chunked` was specified before the data will be written as
+    /// a chunk (prefixed with length). Otherwise encoder will ensure that
+    /// data fits content-length
+    ///
+    /// # Panics
+    ///
+    /// Panics when data is larger than what was specified in `add_length` or
+    /// when no body is allowed in this kind of request.
+    pub fn write_body(&mut self, data: &[u8]) {
+        self.message.write_body(&mut self.buf.out_buf, data)
+    }
+    /// Finish writing request and return `EncoderDone` which can be moved to
+    ///
+    /// # Panics
+    ///
+    /// Panics when the request is in a wrong state.
     pub fn done(mut self) -> EncoderDone<S> {
         self.message.done(&mut self.buf.out_buf);
         EncoderDone { buf: self.buf }
