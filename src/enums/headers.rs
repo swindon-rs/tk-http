@@ -27,6 +27,18 @@ pub enum Method {
     Other(String),
 }
 
+/// Enum Representing HTTP Request Headers.
+#[derive(Debug, PartialEq)]
+pub enum Header {
+    Host,
+    Connection,
+    KeepAlive,
+    ContentLength,
+    TransferEncoding,
+    // add some more
+    Raw(String),
+}
+
 impl<'a> From<&'a str> for Method
 {
 
@@ -46,18 +58,25 @@ impl<'a> From<&'a str> for Method
     }
 }
 
-
-/// Enum Representing HTTP Request Headers.
-#[derive(Debug, PartialEq)]
-pub enum Header {
-    Host,
-    Connection,
-    KeepAlive,
-    ContentLength,
-    TransferEncoding,
-    // add some more
-    Raw(String),
+impl AsRef<str> for Method {
+    fn as_ref(&self) -> &str {
+        use super::Method::*;
+        match *self {
+            Options => "OPTIONS",
+            Get => "GET",
+            Head => "HEAD",
+            Post => "POST",
+            Put => "PUT",
+            Patch => "PATCH",
+            Delete => "DELETE",
+            Trace => "TRACE",
+            Connect => "CONNECT",
+            Other(ref x) => &x,
+        }
+    }
 }
+
+
 
 impl<'a> From<&'a str> for Header {
 
