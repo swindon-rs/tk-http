@@ -17,7 +17,7 @@
 //! use tokio_core::reactor::Core;
 //! use tokio_core::net::TcpStream;
 //! use futures::{Async, Finished, finished};
-//! use minihttp::server::{Request, Error, ResponseFn, Status};
+//! use minihttp::server::{Request, Error, ResponseFn};
 //! use minihttp::enums::{Status};
 //!
 //! #[derive(Clone)]
@@ -30,7 +30,7 @@
 //!    type Error = Error;
 //!    type Future = Finished<Self::Response, Error>;
 //!
-//!     fn call(&self, _req: minihttp::Request) -> Self::Future {
+//!     fn call(&self, _req: Request) -> Self::Future {
 //!        // Note: rather than allocating a response object, we return
 //!        // a lambda that pushes headers into `ResponseWriter` which
 //!        // writes them directly into response buffer without allocating
