@@ -17,6 +17,8 @@ mod config;
 mod error;
 mod lambda;
 mod request;
+mod codec;
+mod encoder;
 mod serializer;
 mod response_writer;
 mod simple_error_page;
@@ -27,6 +29,8 @@ pub use self::error::Error;
 pub use self::response_writer::{ResponseWriter};
 pub use self::simple_error_page::SimpleErrorPage;
 pub use self::lambda::ResponseFn;
+pub use self::encoder::{Encoder, EncoderDone};
+pub use self::codec::{Codec, RecvMode};
 
 
 enum InFlight<F, R, S: Io>

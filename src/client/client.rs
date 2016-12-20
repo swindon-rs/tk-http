@@ -52,7 +52,6 @@ pub enum RecvMode {
 }
 
 
-#[derive(Debug)]
 /// A borrowed structure that represents response headers
 ///
 /// It's passed to `Codec::headers_received` and you are free to store or
@@ -61,6 +60,8 @@ pub enum RecvMode {
 /// Note, we don't strip hop-by-hop headers (`Connection: close`,
 /// `Transfer-Encoding`) and we use them to ensure correctness of the protocol.
 /// You must skip them if proxying headers somewhere.
+// TODO(tailhook) hide the structure?
+#[derive(Debug)]
 pub struct Head<'a> {
     pub version: Version,
     pub code: u16,
