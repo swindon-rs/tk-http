@@ -8,8 +8,7 @@ use netbuf::Buf;
 use futures::{Async, Poll};
 
 use enums::{Method, Header};
-use super::config::ResponseConfig;
-use super::Error;
+use super::{Error, ResponseConfig};
 use {Version};
 
 

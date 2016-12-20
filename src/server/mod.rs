@@ -10,7 +10,6 @@ use tokio_core::io::Io;
 use tokio_service::Service;
 
 use self::request::{RequestParser, response_config};
-use self::config::{ResponseConfig};
 
 
 mod config;
@@ -32,6 +31,30 @@ pub use self::lambda::ResponseFn;
 pub use self::encoder::{Encoder, EncoderDone};
 pub use self::codec::{Codec, RecvMode};
 
+use {Version};
+
+
+/// Fine-grained configuration of the HTTP server
+#[derive(Debug, Clone)]
+pub struct Config {
+    inflight_request_limit: usize,
+    inflight_request_prealloc: usize,
+}
+
+
+/// This structure contains all needed info to start response of the request
+/// in a correct manner
+///
+/// This is ought to be used in serializer only
+#[derive(Debug, Clone, Copy)]
+pub struct ResponseConfig {
+    /// Whether request is a HEAD request
+    pub is_head: bool,
+    /// Is `Connection: close` in request or HTTP version == 1.0
+    pub do_close: bool,
+    /// Version of HTTP request
+    pub version: Version,
+}
 
 enum InFlight<F, R, S: Io>
     where F: Future<Item=R>,

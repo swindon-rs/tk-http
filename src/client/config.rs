@@ -26,7 +26,7 @@ impl Config {
         self.inflight_request_prealloc = value;
         self
     }
-    /// Create a Arc'd confgi clone to pass to the constructor
+    /// Create a Arc'd config clone to pass to the constructor
     ///
     /// This is just a convenience method.
     pub fn done(&mut self) -> Arc<Config> {

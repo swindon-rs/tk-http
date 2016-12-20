@@ -28,7 +28,7 @@ enum InState<S: Io, C: Codec<S>> {
     Void,
 }
 
-/// A low-level HTTP/1.x protocol handler
+/// A low-level HTTP/1.x client protocol handler
 ///
 /// Note, most of the time you need some reconnection facility and/or
 /// connection pooling on top of this interface
