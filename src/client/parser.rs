@@ -25,7 +25,7 @@ const MAX_HEADERS: usize = 1024;
 #[derive(Debug, Clone)]
 enum BodyProgress {
     Fixed(usize), // bytes left
-    Eof, // bytes left
+    Eof,
     Chunked { buffered: usize, pending_chunk: usize, done: bool },
 }
 

@@ -1,8 +1,10 @@
+use futures::Future;
 use tk_bufstream::{IoBuf, WriteBuf, ReadBuf};
+use tokio_core::io::Io;
 
 use super::parser::Parser;
 use super::encoder::{self, get_inner};
-use super::{Codec, Error, EncoderDone, Config};
+use super::{Codec, Error, EncoderDone, Config, RecvMode};
 
 
 enum OutState<S: Io> {
@@ -11,18 +13,29 @@ enum OutState<S: Io> {
     Void,
 }
 
-enum InState<S: Io, C: Codec<S>> {
-    Idle(ReadBuf<S>),
-    Read(Parser<S, C>),
+// TODO(tailhook) review usizes here, probaby we may accept u64
+#[derive(Debug, Clone)]
+enum BodyProgress {
+    Fixed(usize), // bytes left
+    Chunked { buffered: usize, pending_chunk: usize, done: bool },
+}
+
+enum InState {
+    Headers,
+    Body {
+        mode: RecvMode,
+        progress: BodyProgress,
+    },
     Void,
 }
 
 /// A low-level HTTP/1.x server protocol handler
 pub struct Proto<S: Io, C: Codec<S>> {
-    reading: InState<S, C>,
+    codec: C,
+    inbuf: ReadBuf<S>,
+    reading: InState,
     waiting: VecDeque<(C, Arc<AtomicUsize>)>,
     writing: OutState<S>,
-    close: Arc<AtomicBool>,
     config: Arc<Config>,
 }
 

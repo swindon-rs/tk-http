@@ -1,5 +1,4 @@
 extern crate tokio_core;
-extern crate tokio_service;
 extern crate futures;
 extern crate tk_bufstream;
 extern crate netbuf;
@@ -50,8 +49,15 @@ fn main() {
     let mut lp = Core::new().unwrap();
 
     let addr = "0.0.0.0:8080".parse().unwrap();
+    let listener = TcpListener::bind(&addr, &lp.handle()).unwrap();
+    let cfg = Config::new().done();
 
-    minihttp::serve(&lp.handle(), addr, || Ok(HelloWorld));
+    let done = listener.incoming()
+        .map_err(|e| { println!("Accept error: {}", e); })
+        .map(|(socket, addr)| {
+            Proto::new(socket, &cfg)
+        }).buffer_unordered(MAX_CONNECTIONS)
+          .for_each(|()| Ok(()));
 
-    lp.run(futures::empty::<(), ()>()).unwrap();
+    lp.run(done).unwrap();
 }
