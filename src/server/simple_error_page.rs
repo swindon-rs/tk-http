@@ -4,9 +4,8 @@ use futures::Finished;
 use tk_bufstream::IoBuf;
 use tokio_core::io::Io;
 
-use serve::GenericResponse;
 use enums::Status;
-use {Error, ResponseWriter};
+use super::{Error, ResponseWriter, GenericResponse};
 
 const PART1: &'static str = "\
     <!DOCTYPE html>

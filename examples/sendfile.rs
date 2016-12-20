@@ -23,8 +23,8 @@ use futures_cpupool::CpuPool;
 use tk_bufstream::IoBuf;
 use tk_sendfile::DiskPool;
 
-use minihttp::request::Request;
-use minihttp::{ResponseWriter, GenericResponse, Error, Status};
+use minihttp::enums::Status;
+use minihttp::server::{ResponseWriter, GenericResponse, Error, Request};
 
 #[derive(Clone)]
 struct HelloWorld {

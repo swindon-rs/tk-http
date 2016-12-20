@@ -1,3 +1,5 @@
+//! HTTP server protocol implementation
+//!
 use std::collections::VecDeque;
 use std::net::SocketAddr;
 
@@ -7,9 +9,24 @@ use futures::{Future, Poll, Async};
 use tokio_core::io::Io;
 use tokio_service::Service;
 
-use request::{Request, RequestParser, response_config};
-use serve::{ResponseConfig, ResponseWriter};
-use {GenericResponse, Error};
+use self::request::{RequestParser, response_config};
+use self::config::{ResponseConfig};
+
+
+mod config;
+mod error;
+mod lambda;
+mod request;
+mod serializer;
+mod response_writer;
+mod simple_error_page;
+
+pub use self::request::Request;
+pub use self::serializer::GenericResponse;
+pub use self::error::Error;
+pub use self::response_writer::{ResponseWriter};
+pub use self::simple_error_page::SimpleErrorPage;
+pub use self::lambda::ResponseFn;
 
 
 enum InFlight<F, R, S: Io>

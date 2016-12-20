@@ -7,7 +7,7 @@ use futures::Async;
 use netbuf::Buf;
 
 use minihttp::enums::{Method, Version};
-use minihttp::request::Request;
+use minihttp::server::Request;
 
 
 #[test]

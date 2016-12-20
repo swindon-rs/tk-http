@@ -2,7 +2,7 @@ use futures::Future;
 use tk_bufstream::IoBuf;
 use tokio_core::io::Io;
 
-use {Error, ResponseWriter};
+use super::{Error, ResponseWriter};
 
 
 /// A response object

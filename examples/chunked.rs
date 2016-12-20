@@ -15,8 +15,8 @@ use tokio_service::Service;
 use tk_bufstream::IoBuf;
 use futures::{Finished, finished};
 
-use minihttp::{ResponseFn, Error, Status};
-use minihttp::request::Request;
+use minihttp::enums::Status;
+use minihttp::server::{ResponseFn, Error, Request};
 
 #[derive(Clone)]
 struct HelloWorld;

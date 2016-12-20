@@ -2,7 +2,7 @@ use tokio_core::io::Io;
 use tk_bufstream::IoBuf;
 use futures::IntoFuture;
 
-use {Error, ResponseWriter, GenericResponse};
+use super::{Error, ResponseWriter, GenericResponse};
 
 pub struct ResponseFn<T, S: Io>(Box<FnMut(ResponseWriter<S>) -> T>)
     where T: IntoFuture<Item=IoBuf<S>, Error=Error>;

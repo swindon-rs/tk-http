@@ -7,9 +7,10 @@ use httparse;
 use netbuf::Buf;
 use futures::{Async, Poll};
 
-use super::enums::{Method, Header};
-use serve::ResponseConfig;
-use {Version, Error};
+use enums::{Method, Header};
+use super::config::ResponseConfig;
+use super::Error;
+use {Version};
 
 
 /// Number of headers to allocate on stack
@@ -96,7 +97,7 @@ impl Request {
         // TODO(popravich) revise body detection
         // see  http://httpwg.github.io/specs/rfc7230.html#message.body.length
         //      rotor-http/parser.rs#L86-L120
-        use super::enums::headers;
+        use enums::headers;
         let mut body_kind = BodyKind::WithoutBody;
         let mut has_content_length = false;
 

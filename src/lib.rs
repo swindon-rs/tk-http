@@ -17,7 +17,8 @@
 //! use tokio_core::reactor::Core;
 //! use tokio_core::net::TcpStream;
 //! use futures::{Async, Finished, finished};
-//! use minihttp::{Request, Error, ResponseFn, Status};
+//! use minihttp::server::{Request, Error, ResponseFn, Status};
+//! use minihttp::enums::{Status};
 //!
 //! #[derive(Clone)]
 //! struct HelloWorld;
@@ -72,15 +73,10 @@ extern crate futures_cpupool;
 extern crate ns_std_threaded;
 
 
-pub mod request;
 pub mod server;
 pub mod enums;
 pub mod client;
-mod error;
-mod lambda;
 mod headers;
-mod simple_error_page;
-mod serve;
 mod base_serializer;
 mod opt_future;
 
@@ -93,11 +89,6 @@ use tokio_core::net::{TcpListener, TcpStream};
 use tokio_service::NewService;
 
 pub use enums::{Version, Status};
-pub use request::Request;
-pub use error::Error;
-pub use serve::{GenericResponse, ResponseWriter};
-pub use lambda::ResponseFn;
-pub use simple_error_page::SimpleErrorPage;
 pub use opt_future::OptFuture;
 
 
@@ -117,8 +108,9 @@ pub use opt_future::OptFuture;
 /// lp.run(futures::empty<(), ()>() ).unwrap();
 /// ```
 pub fn serve<T>(handle: &Handle, addr: SocketAddr, service: T)
-    where T: NewService<Request=Request, Error=Error> + 'static,
-          T::Response: GenericResponse<TcpStream>,
+    where
+        T: NewService<Request=server::Request, Error=server::Error> + 'static,
+        T::Response: server::GenericResponse<TcpStream>,
 {
     let listener = TcpListener::bind(&addr, handle).unwrap();
     let handle2 = handle.clone();
