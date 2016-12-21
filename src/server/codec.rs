@@ -74,6 +74,7 @@ pub struct Head<'a> {
 
 /// This is a low-level interface to the http server
 pub trait Dispatcher<S: Io> {
+    type Codec: Codec<S>;
 
     /// Received headers of a request
     ///
@@ -82,10 +83,21 @@ pub trait Dispatcher<S: Io> {
     /// to handle some data from the headers you need to store them somewhere
     /// (for example on `self`) for further processing.
     fn headers_received(&mut self, headers: &Head)
-        -> Result<(RecvMode, Codec<S>), Error>;
+        -> Result<Self::Codec, Error>;
 }
 
 pub trait Codec<S: Io> {
+    /// Return a mode which will be used to receive request body
+    ///
+    ///
+    /// Note: this mode not only influences the size of chunks that
+    /// `data_received` recieves and amount of buffering, but also it
+    /// constrains
+    /// sequence betwee
+    ///
+    /// Called once, right after `headers_received`
+    fn recv_mode(&mut self) -> RecvMode;
+
     /// Chunk of the response body received
     ///
     /// `end` equals to `true` for the last chunk of the data.
