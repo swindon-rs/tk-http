@@ -4,7 +4,7 @@ use tokio_core::io::Io;
 
 use super::parser::Parser;
 use super::encoder::{self, get_inner};
-use super::{Codec, Error, EncoderDone, Config, RecvMode};
+use super::{Dispatcher, Codec, Error, EncoderDone, Config, RecvMode};
 
 
 enum OutState<S: Io> {
@@ -30,7 +30,7 @@ enum InState {
 }
 
 /// A low-level HTTP/1.x server protocol handler
-pub struct Proto<S: Io, C: Codec<S>> {
+pub struct Proto<S: Io, D: Dispatcher<S>> {
     codec: C,
     inbuf: ReadBuf<S>,
     reading: InState,

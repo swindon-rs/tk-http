@@ -10,7 +10,7 @@ mod buffered;
 
 pub use self::error::Error;
 pub use self::encoder::{Encoder, EncoderDone};
-pub use self::codec::{Codec, RecvMode, Head};
+pub use self::codec::{Codec, Dispatcher, RecvMode, Head};
 
 
 /// Fine-grained configuration of the HTTP server

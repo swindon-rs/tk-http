@@ -92,8 +92,8 @@ pub trait Codec<S: Io> {
     ///
     /// Note: this mode not only influences the size of chunks that
     /// `data_received` recieves and amount of buffering, but also it
-    /// constrains
-    /// sequence betwee
+    /// constrains the sequence between calls of `start_response()`
+    /// and `data_received()`.
     ///
     /// Called once, right after `headers_received`
     fn recv_mode(&mut self) -> RecvMode;
