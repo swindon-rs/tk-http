@@ -1,4 +1,7 @@
-use futures::Future;
+use std::sync::Arc;
+use std::collections::VecDeque;
+
+use futures::{Future, Poll, Async};
 use tk_bufstream::{IoBuf, WriteBuf, ReadBuf};
 use tokio_core::io::Io;
 
@@ -20,33 +23,36 @@ enum BodyProgress {
     Chunked { buffered: usize, pending_chunk: usize, done: bool },
 }
 
-enum InState {
+enum InState<C> {
     Headers,
     Body {
         mode: RecvMode,
         progress: BodyProgress,
+        codec: C,
     },
     Void,
 }
 
 /// A low-level HTTP/1.x server protocol handler
 pub struct Proto<S: Io, D: Dispatcher<S>> {
-    codec: C,
+    dispatcher: D,
     inbuf: ReadBuf<S>,
-    reading: InState,
-    waiting: VecDeque<(C, Arc<AtomicUsize>)>,
+    reading: InState<D::Codec>,
+    waiting: VecDeque<D::Codec>,
     writing: OutState<S>,
     config: Arc<Config>,
 }
 
-impl<S: Io, C: Codec<S>> Proto<S, C> {
+impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
     /// Create a new protocol implementation from a TCP connection and a config
     ///
     /// You should use this protocol as a `Sink`
-    pub fn new(conn: S, cfg: &Arc<Config>) -> Proto<S, C> {
+    pub fn new(conn: S, cfg: &Arc<Config>, dispatcher: D) -> Proto<S, D> {
         let (cout, cin) = IoBuf::new(conn).split();
         return Proto {
-            reading: InState::Idle(cin),
+            dispatcher: dispatcher,
+            inbuf: cin,
+            reading: InState::Headers,
             waiting: VecDeque::with_capacity(cfg.inflight_request_prealloc),
             writing: OutState::Idle(cout),
             config: cfg.clone(),
@@ -54,16 +60,16 @@ impl<S: Io, C: Codec<S>> Proto<S, C> {
     }
 }
 
-impl<S: Io, C: Codec<S>> Proto<S, C> {
-    fn do_reads(&mut self) -> Poll<(), Error> {
+impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
+    fn do_reads(&mut self) -> Result<bool, Error> {
         unimplemented!();
     }
-    fn do_writes(&mut self) -> Poll<(), Error> {
+    fn do_writes(&mut self) -> Result<(), Error> {
         unimplemented!();
     }
 }
 
-impl<S: Io, C: Codec<S>> Proto<S, C> {
+impl<S: Io, D: Dispatcher<S>> Future for Proto<S, D> {
     type Item = ();
     type Error = Error;
 
