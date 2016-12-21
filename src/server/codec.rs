@@ -26,17 +26,21 @@ pub enum BodyKind {
 /// using your own buffering). We do our best to optimize it for you.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RecvMode {
-    /// Download whole message body (request or response) into the memory.
+    /// Download whole message body (request or response) into the memory
+    /// before starting response
     ///
     /// The argument is maximum size of the body. The Buffered variant
     /// works equally well for Chunked encoding and for read-util-end-of-stream
     /// mode of HTTP/1.0, so sometimes you can't know the size of the request
     /// in advance. Note this is just an upper limit it's neither buffer size
     /// nor *minimum* size of the body.
-    ///
-    /// Note the buffer size is asserted on if it's bigger than max buffer size
-    Buffered(usize),
+    BufferedUpfront(usize),
     /// Fetch data chunk-by-chunk.
+    ///
+    /// Note, your response handler can start either before or after
+    /// progressive body has started or ended to read. I mean they are
+    /// completely independent, and actual sequence of events depends on other
+    /// requests coming in and performance of a client.
     ///
     /// The parameter denotes minimum number of bytes that may be passed
     /// to the protocol handler. This is for performance tuning (i.e. less
@@ -69,14 +73,7 @@ pub struct Head<'a> {
 }
 
 /// This is a low-level interface to the http server
-///
-/// Your requests starts by sending a codec into a connection Sink or a
-/// connection pool. And then it's driven by a callbacks here.
-///
-/// If you don't have any special needs you might want to use
-/// `client::buffered::Buffered` codec implementation instead of implemeting
-/// this trait manually.
-pub trait Codec<S: Io> {
+pub trait Dispatcher<S: Io> {
 
     /// Received headers of a request
     ///
@@ -85,8 +82,10 @@ pub trait Codec<S: Io> {
     /// to handle some data from the headers you need to store them somewhere
     /// (for example on `self`) for further processing.
     fn headers_received(&mut self, headers: &Head)
-        -> Result<RecvMode, Error>;
+        -> Result<(RecvMode, Codec<S>), Error>;
+}
 
+pub trait Codec<S: Io> {
     /// Chunk of the response body received
     ///
     /// `end` equals to `true` for the last chunk of the data.
