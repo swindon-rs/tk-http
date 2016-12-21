@@ -207,7 +207,7 @@ impl<S: Io> Encoder<S> {
     /// # Panics
     ///
     /// When the response is in the wrong state.
-    pub fn done<E>(mut self) -> EncoderDone<S> {
+    pub fn done(mut self) -> EncoderDone<S> {
         self.state.done(&mut self.io.out_buf);
         EncoderDone { buf: self.io }
     }

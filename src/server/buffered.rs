@@ -1,4 +1,3 @@
-use std::mem;
 use std::net::SocketAddr;
 use std::marker::PhantomData;
 
@@ -22,10 +21,11 @@ pub struct Request {
     body: Vec<u8>,
 }
 
-pub struct BufferedDispatcher<R> {
+pub struct BufferedDispatcher<S: Io, R: Service<S>> {
     addr: SocketAddr,
     max_request_length: usize,
     service: R,
+    phantom: PhantomData<S>,
 }
 
 pub struct BufferedCodec<R> {
@@ -39,6 +39,27 @@ pub trait Service<S: Io> {
         -> OptFuture<EncoderDone<S>, Error>;
 }
 
+impl Request {
+    pub fn peer_addr(&self) -> SocketAddr {
+        self.peer_addr
+    }
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+    pub fn version(&self) -> Version {
+        self.version
+    }
+    pub fn headers(&self) -> &[(String, Vec<u8>)] {
+        &self.headers
+    }
+    pub fn body(&self) -> &[u8] {
+        &self.body
+    }
+}
+
 impl<S: Io, T> Service<S> for T
     where T: FnMut(Request, Encoder<S>) -> OptFuture<EncoderDone<S>, Error>
 {
@@ -50,15 +71,13 @@ impl<S: Io, T> Service<S> for T
 }
 
 
-impl<R> BufferedDispatcher<R> {
-    fn new<S>(addr: SocketAddr, service: R) -> BufferedDispatcher<R>
-        where S: Io,
-              R: Service<S>,
-    {
+impl<S: Io, R: Service<S>> BufferedDispatcher<S, R> {
+    pub fn new(addr: SocketAddr, service: R) -> BufferedDispatcher<S, R> {
         BufferedDispatcher {
             addr: addr,
             max_request_length: 10_485_760,
             service: service,
+            phantom: PhantomData,
         }
     }
     pub fn max_request_length(&mut self, value: usize) {
@@ -66,7 +85,7 @@ impl<R> BufferedDispatcher<R> {
     }
 }
 
-impl<S: Io, R: Service<S> + Clone> Dispatcher<S> for BufferedDispatcher<R> {
+impl<S: Io, R: Service<S> + Clone> Dispatcher<S> for BufferedDispatcher<S, R> {
     type Codec = BufferedCodec<R>;
 
     fn headers_received(&mut self, headers: &Head)

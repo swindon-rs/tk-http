@@ -1,6 +1,5 @@
 extern crate time;
 extern crate tokio_core;
-extern crate tokio_service;
 extern crate futures;
 extern crate tk_bufstream;
 extern crate netbuf;
@@ -11,37 +10,32 @@ extern crate env_logger;
 use std::env;
 
 use tokio_core::reactor::Core;
-use tokio_core::net::TcpStream;
-use tokio_service::Service;
-use tk_bufstream::IoBuf;
-use futures::{Finished, finished};
+use tokio_core::net::{TcpListener};
+use tokio_core::io::Io;
+use futures::{Stream, Future};
 
-use minihttp::server::{ResponseFn, Error, Request};
-use minihttp::enums::Status;
+use minihttp::{Status, OptFuture};
+use minihttp::server::buffered::{Service, Request, BufferedDispatcher};
+use minihttp::server::{Encoder, EncoderDone, Config, Proto, Error};
 
 #[derive(Clone)]
 struct HelloWorld;
 
 const BODY: &'static str = "Hello World!";
 
-impl Service for HelloWorld {
-    type Request = Request;
-    type Response = ResponseFn<Finished<IoBuf<TcpStream>, Error>, TcpStream>;
-    type Error = Error;
-    type Future = Finished<Self::Response, Error>;
-
-    fn call(&self, _req: Self::Request) -> Self::Future {
-        finished(ResponseFn::new(move |mut res| {
-            res.status(Status::Ok);
-            res.add_length(BODY.as_bytes().len() as u64).unwrap();
-            res.format_header("Date", time::now_utc().rfc822()).unwrap();
-            res.add_header("Server", concat!("minihttp/",
-                                     env!("CARGO_PKG_VERSION"))).unwrap();
-            if res.done_headers().unwrap() {
-                res.write_body(BODY.as_bytes());
-            }
-            res.done()
-        }))
+impl<S: Io> Service<S> for HelloWorld {
+    fn call(&mut self, _req: Request, mut e: Encoder<S>)
+        -> OptFuture<EncoderDone<S>, Error>
+    {
+        e.status(Status::Ok);
+        e.add_length(BODY.as_bytes().len() as u64).unwrap();
+        e.format_header("Date", time::now_utc().rfc822()).unwrap();
+        e.add_header("Server", concat!("minihttp/",
+                                 env!("CARGO_PKG_VERSION"))).unwrap();
+        if e.done_headers().unwrap() {
+            e.write_body(BODY.as_bytes());
+        }
+        OptFuture::Value(Ok(e.done()))
     }
 }
 
@@ -55,8 +49,18 @@ fn main() {
     let mut lp = Core::new().unwrap();
 
     let addr = "0.0.0.0:8080".parse().unwrap();
+    let listener = TcpListener::bind(&addr, &lp.handle()).unwrap();
+    let cfg = Config::new().done();
 
-    minihttp::serve(&lp.handle(), addr, || Ok(HelloWorld));
+    let done = listener.incoming()
+        .map_err(|e| { println!("Accept error: {}", e); })
+        .map(|(socket, addr)| {
+            Proto::new(socket, &cfg,
+                BufferedDispatcher::new(addr, HelloWorld))
+            .map_err(|e| { println!("Connection error: {}", e); })
+        })
+        .buffer_unordered(200000)
+          .for_each(|()| Ok(()));
 
-    lp.run(futures::empty::<(), ()>()).unwrap();
+    lp.run(done).unwrap();
 }

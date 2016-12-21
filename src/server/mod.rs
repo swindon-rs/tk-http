@@ -6,11 +6,12 @@ mod codec;
 mod proto;
 mod parser;
 mod encoder;
-mod buffered;
+pub mod buffered;
 
 pub use self::error::Error;
 pub use self::encoder::{Encoder, EncoderDone};
 pub use self::codec::{Codec, Dispatcher, RecvMode, Head};
+pub use self::proto::Proto;
 
 
 /// Fine-grained configuration of the HTTP server
