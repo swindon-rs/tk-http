@@ -21,5 +21,8 @@ quick_error! {
             description("chunk size parse error")
             from()
         }
+        BadRequestTarget {
+            description("error parsing request target")
+        }
     }
 }

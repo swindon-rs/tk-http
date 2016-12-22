@@ -6,6 +6,7 @@ mod codec;
 mod proto;
 mod parser;
 mod encoder;
+mod request_target;
 pub mod buffered;
 
 pub use self::error::Error;
