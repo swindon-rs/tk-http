@@ -1,11 +1,11 @@
 use std::net::SocketAddr;
 use std::marker::PhantomData;
 
-use futures::Async;
+use futures::{Async, Future};
 use tokio_core::io::Io;
 
 use super::{Error, Encoder, EncoderDone, Dispatcher, Codec, Head, RecvMode};
-use {OptFuture, Version};
+use {Version};
 
 /// Buffered request struct
 ///
@@ -21,10 +21,10 @@ pub struct Request {
     body: Vec<u8>,
 }
 
-pub struct BufferedDispatcher<S: Io, R: Service<S>> {
+pub struct BufferedDispatcher<S: Io, N: NewService<S>> {
     addr: SocketAddr,
     max_request_length: usize,
-    service: R,
+    service: N,
     phantom: PhantomData<S>,
 }
 
@@ -34,9 +34,15 @@ pub struct BufferedCodec<R> {
     request: Option<Request>,
 }
 
+pub trait NewService<S: Io> {
+    type Future: Future<Item=EncoderDone<S>, Error=Error>;
+    type Instance: Service<S, Future=Self::Future>;
+    fn new(&self) -> Self::Instance;
+}
+
 pub trait Service<S: Io> {
-    fn call(&mut self, request: Request, encoder: Encoder<S>)
-        -> OptFuture<EncoderDone<S>, Error>;
+    type Future: Future<Item=EncoderDone<S>, Error=Error>;
+    fn call(&mut self, request: Request, encoder: Encoder<S>) -> Self::Future;
 }
 
 impl Request {
@@ -60,19 +66,31 @@ impl Request {
     }
 }
 
-impl<S: Io, T> Service<S> for T
-    where T: FnMut(Request, Encoder<S>) -> OptFuture<EncoderDone<S>, Error>
+impl<S: Io, T, R> NewService<S> for T
+    where T: Fn() -> R,
+          R: Service<S>,
 {
-    fn call(&mut self, request: Request, encoder: Encoder<S>)
-        -> OptFuture<EncoderDone<S>, Error>
+    type Future = R::Future;
+    type Instance = R;
+    fn new(&self) -> R {
+        (self)()
+    }
+}
+
+impl<S: Io, T, F> Service<S> for T
+    where T: Fn(Request, Encoder<S>) -> F,
+        F: Future<Item=EncoderDone<S>, Error=Error>,
+{
+    type Future = F;
+    fn call(&mut self, request: Request, encoder: Encoder<S>) -> F
     {
         (self)(request, encoder)
     }
 }
 
 
-impl<S: Io, R: Service<S>> BufferedDispatcher<S, R> {
-    pub fn new(addr: SocketAddr, service: R) -> BufferedDispatcher<S, R> {
+impl<S: Io, N: NewService<S>> BufferedDispatcher<S, N> {
+    pub fn new(addr: SocketAddr, service: N) -> BufferedDispatcher<S, N> {
         BufferedDispatcher {
             addr: addr,
             max_request_length: 10_485_760,
@@ -85,15 +103,15 @@ impl<S: Io, R: Service<S>> BufferedDispatcher<S, R> {
     }
 }
 
-impl<S: Io, R: Service<S> + Clone> Dispatcher<S> for BufferedDispatcher<S, R> {
-    type Codec = BufferedCodec<R>;
+impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N> {
+    type Codec = BufferedCodec<N::Instance>;
 
     fn headers_received(&mut self, headers: &Head)
         -> Result<Self::Codec, Error>
     {
         Ok(BufferedCodec {
             max_request_length: self.max_request_length,
-            service: self.service.clone(),
+            service: self.service.new(),
             request: Some(Request {
                 peer_addr: self.addr,
                 method: headers.method.to_string(),
@@ -107,7 +125,9 @@ impl<S: Io, R: Service<S> + Clone> Dispatcher<S> for BufferedDispatcher<S, R> {
         })
     }
 }
-impl<S: Io, R: Service<S> + Clone> Codec<S> for BufferedCodec<R> {
+
+impl<S: Io, R: Service<S>> Codec<S> for BufferedCodec<R> {
+    type ResponseFuture = R::Future;
     fn recv_mode(&mut self) -> RecvMode {
         RecvMode::BufferedUpfront(self.max_request_length)
     }
@@ -118,9 +138,7 @@ impl<S: Io, R: Service<S> + Clone> Codec<S> for BufferedCodec<R> {
         self.request.as_mut().unwrap().body = data.to_vec();
         Ok(Async::Ready(data.len()))
     }
-    fn start_response(&mut self, e: Encoder<S>)
-        -> OptFuture<EncoderDone<S>, Error>
-    {
+    fn start_response(&mut self, e: Encoder<S>) -> R::Future {
         self.service.call(self.request.take().unwrap(), e)
     }
 }

@@ -4,15 +4,16 @@ mod config;
 mod error;
 mod codec;
 mod proto;
-mod parser;
 mod encoder;
 mod request_target;
+mod headers;
 pub mod buffered;
 
 pub use self::error::Error;
 pub use self::encoder::{Encoder, EncoderDone};
-pub use self::codec::{Codec, Dispatcher, RecvMode, Head};
+pub use self::codec::{Codec, Dispatcher, RecvMode};
 pub use self::proto::Proto;
+pub use self::headers::Head;
 
 
 /// Fine-grained configuration of the HTTP server

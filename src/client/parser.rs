@@ -15,7 +15,7 @@ use client::encoder::RequestState;
 use client::{Codec, Error};
 
 
-/// Number of headers to allocate on stack
+/// Number of headers to allocate on a stack
 const MIN_HEADERS: usize = 16;
 /// A hard limit on the number of headers
 const MAX_HEADERS: usize = 1024;

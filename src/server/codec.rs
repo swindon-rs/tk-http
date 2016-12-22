@@ -1,8 +1,8 @@
-use futures::Async;
+use futures::{Async, Future};
 use httparse::Header;
 use tokio_core::io::Io;
 
-use super::{Error, Encoder, EncoderDone};
+use super::{Error, Encoder, EncoderDone, Head};
 use {Version, OptFuture};
 
 
@@ -51,27 +51,6 @@ pub enum RecvMode {
     Progressive(usize),
 }
 
-/// A borrowed structure that represents request headers
-///
-/// It's passed to `Codec::headers_received` and you are free to store or
-/// discard any needed fields and headers from it.
-///
-/// Note, we don't strip hop-by-hop headers (`Connection: close`,
-/// `Transfer-Encoding`) and we use them to ensure correctness of the protocol.
-/// You must skip them if proxying headers somewhere.
-// TODO(tailhook) hide the structure?
-#[derive(Debug)]
-pub struct Head<'a> {
-    pub method: &'a str,
-    pub path: &'a str,
-    pub version: Version,
-    pub host: &'a str,
-    pub headers: &'a [Header<'a>],
-    pub body_kind: BodyKind,
-    pub close: bool,
-    pub connection: &'a [u8],
-}
-
 /// This is a low-level interface to the http server
 pub trait Dispatcher<S: Io> {
     type Codec: Codec<S>;
@@ -87,6 +66,12 @@ pub trait Dispatcher<S: Io> {
 }
 
 pub trait Codec<S: Io> {
+    /// This is a future returned by `start_response`
+    ///
+    /// It's fine if it's just `Box<Future<Item=EncoderDone<S>, Error>>` in
+    /// most cases.
+    type ResponseFuture: Future<Item=EncoderDone<S>, Error=Error>;
+
     /// Return a mode which will be used to receive request body
     ///
     ///
@@ -127,6 +112,5 @@ pub trait Codec<S: Io> {
     /// Everything you write into a buffer might be flushed to the network
     /// immediately (or as fast as you yield to main loop). On the other
     /// hand we might buffer/pipeline multiple responses at once.
-    fn start_response(&mut self, e: Encoder<S>)
-        -> OptFuture<EncoderDone<S>, Error>;
+    fn start_response(&mut self, e: Encoder<S>) -> Self::ResponseFuture;
 }

@@ -6,6 +6,7 @@ use tk_bufstream::{Flushed, WriteBuf};
 
 use base_serializer::{MessageState, HeaderError};
 use enums::{Version, Status};
+use super::codec::Head;
 
 
 /// This a response writer that you receive in `Codec`
@@ -23,26 +24,23 @@ pub struct EncoderDone<S: Io> {
     buf: WriteBuf<S>,
 }
 
+/// This structure contains all needed info to start response of the request
+/// in a correct manner
+///
+/// This is ought to be used in serializer only
+#[derive(Debug, Clone, Copy)]
+pub struct ResponseConfig {
+    /// Whether request is a HEAD request
+    pub is_head: bool,
+    /// Is `Connection: close` in request or HTTP version == 1.0
+    pub do_close: bool,
+    /// Version of HTTP request
+    pub version: Version,
+}
+
 
 // TODO: Support responses to CONNECT and `Upgrade: websocket` requests.
 impl<S: Io> Encoder<S> {
-    /// Creates new response message by extracting needed fields from Head.
-    pub fn new(io: WriteBuf<S>, version: Version,
-        is_head: bool, do_close: bool) -> Encoder<S>
-    {
-        use base_serializer::Body::*;
-
-        // TODO(tailhook) implement Connection: Close,
-        // (including explicit one in HTTP/1.0) and maybe others
-        Encoder {
-            state: MessageState::ResponseStart {
-                body: if is_head { Head } else { Normal },
-                version: version,
-                close: do_close || version == Version::Http10,
-            },
-            io: io,
-        }
-    }
     /// Write a 100 (Continue) response.
     ///
     /// A server should respond with the 100 status code if it receives a
@@ -242,4 +240,29 @@ impl<S: Io> io::Write for Encoder<S> {
 
 pub fn get_inner<S: Io>(e: EncoderDone<S>) -> WriteBuf<S> {
     e.buf
+}
+
+pub fn new<S: Io>(io: WriteBuf<S>, cfg: ResponseConfig) -> Encoder<S> {
+    use base_serializer::Body::*;
+
+    // TODO(tailhook) implement Connection: Close,
+    // (including explicit one in HTTP/1.0) and maybe others
+    Encoder {
+        state: MessageState::ResponseStart {
+            body: if cfg.is_head { Head } else { Normal },
+            version: cfg.version,
+            close: cfg.do_close || cfg.version == Version::Http10,
+        },
+        io: io,
+    }
+}
+
+impl ResponseConfig {
+    pub fn from(req: &Head) -> ResponseConfig {
+        ResponseConfig {
+            version: req.version,
+            is_head: req.method == "HEAD",
+            do_close: req.connection_close,
+        }
+    }
 }
