@@ -6,7 +6,7 @@ use tk_bufstream::{Flushed, WriteBuf};
 
 use base_serializer::{MessageState, HeaderError};
 use enums::{Version, Status};
-use super::codec::Head;
+use super::headers::Head;
 
 
 /// This a response writer that you receive in `Codec`
@@ -260,9 +260,9 @@ pub fn new<S: Io>(io: WriteBuf<S>, cfg: ResponseConfig) -> Encoder<S> {
 impl ResponseConfig {
     pub fn from(req: &Head) -> ResponseConfig {
         ResponseConfig {
-            version: req.version,
-            is_head: req.method == "HEAD",
-            do_close: req.connection_close,
+            version: req.version(),
+            is_head: req.method() == "HEAD",
+            do_close: req.connection_close(),
         }
     }
 }

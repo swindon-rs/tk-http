@@ -24,5 +24,20 @@ quick_error! {
         BadRequestTarget {
             description("error parsing request target")
         }
+        HostInvalid {
+            description("invalid host header")
+        }
+        DuplicateHost {
+            description("duplicate host header")
+        }
+        ConnectionInvalid {
+            description("invalid connection header")
+        }
+        ContentLengthInvalid {
+            description("invalid content-length header")
+        }
+        DuplicateContentLength {
+            description("duplicate content length header")
+        }
     }
 }

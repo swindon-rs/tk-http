@@ -16,6 +16,7 @@ pub struct Request {
     peer_addr: SocketAddr,
     method: String,
     path: String,
+    host: Option<String>,
     version: Version,
     headers: Vec<(String, Vec<u8>)>,
     body: Vec<u8>,
@@ -109,15 +110,18 @@ impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N> {
     fn headers_received(&mut self, headers: &Head)
         -> Result<Self::Codec, Error>
     {
+        // TODO(tailhook) strip hop-by-hop headers
         Ok(BufferedCodec {
             max_request_length: self.max_request_length,
             service: self.service.new(),
             request: Some(Request {
                 peer_addr: self.addr,
-                method: headers.method.to_string(),
-                path: headers.path.to_string(),
-                version: headers.version,
-                headers: headers.headers.iter().map(|&header| {
+                method: headers.method().to_string(),
+                // TODO(tailhook) process other forms of path
+                path: headers.path().unwrap().to_string(),
+                host: headers.host().map(|x| x.to_string()),
+                version: headers.version(),
+                headers: headers.headers().iter().map(|&header| {
                     (header.name.to_string(), header.value.to_vec())
                 }).collect(),
                 body: Vec::new(),

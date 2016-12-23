@@ -21,7 +21,7 @@ fn authority_end_char(&x: &u8) -> bool {
 }
 
 impl<'a> RequestTarget<'a> {
-    fn parse(s: &'a str) -> Option<RequestTarget<'a>> {
+    pub fn parse(s: &'a str) -> Option<RequestTarget<'a>> {
         use self::RequestTarget::*;
 
         if s.len() == 0 {
