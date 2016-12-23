@@ -1,9 +1,7 @@
 use futures::{Async, Future};
-use httparse::Header;
 use tokio_core::io::Io;
 
 use super::{Error, Encoder, EncoderDone, Head};
-use {Version, OptFuture};
 
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

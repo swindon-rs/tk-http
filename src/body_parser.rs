@@ -1,6 +1,6 @@
 use httparse::InvalidChunkSize;
 use tokio_core::io::Io;
-use tk_bufstream::{ReadBuf, Buf};
+use tk_bufstream::ReadBuf;
 
 
 use chunked;

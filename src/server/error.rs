@@ -21,6 +21,9 @@ quick_error! {
             description("chunk size parse error")
             from()
         }
+        ConnectionReset {
+            description("connection reset")
+        }
         BadRequestTarget {
             description("error parsing request target")
         }

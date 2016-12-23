@@ -7,7 +7,7 @@ use tk_bufstream::{IoBuf, WriteBuf, ReadBuf};
 use tokio_core::io::Io;
 
 use super::encoder::{self, get_inner, ResponseConfig};
-use super::{Dispatcher, Codec, Error, EncoderDone, Config, RecvMode};
+use super::{Dispatcher, Codec, Error, Config, RecvMode};
 use super::headers::parse_headers;
 use super::codec::BodyKind;
 use chunked;
@@ -20,14 +20,16 @@ enum OutState<S: Io, F> {
     Void,
 }
 
+struct BodyState<C> {
+    mode: RecvMode,
+    progress: BodyProgress,
+    response_config: ResponseConfig,
+    codec: C,
+}
+
 enum InState<C> {
     Headers,
-    Body {
-        mode: RecvMode,
-        progress: BodyProgress,
-        response_config: ResponseConfig,
-        codec: C,
-    },
+    Body(BodyState<C>),
     Hijack,
     Closed,
 }
@@ -47,7 +49,6 @@ fn new_body(mode: BodyKind, recv_mode: RecvMode)
 {
     use super::codec::BodyKind as B;
     use super::RecvMode as M;
-    use super::Error::*;
     use body_parser::BodyProgress as P;
     match (mode, recv_mode) {
         // TODO(tailhook) check size < usize
@@ -85,13 +86,13 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
         loop {
             let limit = match self.reading {
                 Headers => self.config.inflight_request_limit,
-                Body { .. } => self.config.inflight_request_limit-1,
+                Body(..) => self.config.inflight_request_limit-1,
                 Closed | Hijack => return Ok(changed),
             };
             if self.waiting.len() >= limit {
                 break;
             }
-            // TODO(tailhook) Do reads alter parse_headers() [optimization]
+            // TODO(tailhook) Do reads after parse_headers() [optimization]
             self.inbuf.read()?;
             let (next, cont) = match mem::replace(&mut self.reading, Closed) {
                 Headers => {
@@ -99,21 +100,59 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                                         &mut self.dispatcher)?
                     {
                         Some((body, mut codec, cfg)) => {
+                            changed = true;
                             let mode = codec.recv_mode();
                             if mode == RecvMode::Hijack {
+                                self.waiting.push_back((cfg, codec));
                                 (Hijack, true)
                             } else {
-                                (Body { mode: mode,
-                                        response_config: cfg,
-                                        progress: new_body(body, mode)?,
-                                        codec: codec },
+                                (Body(BodyState {
+                                    mode: mode,
+                                    response_config: cfg,
+                                    progress: new_body(body, mode)?,
+                                    codec: codec }),
                                  true)
                             }
                         }
                         None => (Headers, false),
                     }
                 }
-                Body { .. } => unimplemented!(),
+                Body(mut body) => {
+                    body.progress.parse(&mut self.inbuf)?;
+                    let (bytes, done) = body.progress.check_buf(&self.inbuf);
+                    let operation = if done {
+                        Some(body.codec.data_received(
+                            &self.inbuf.in_buf[..bytes], true)?)
+                    } else if self.inbuf.done() {
+                        return Err(Error::ConnectionReset);
+                    } else if matches!(body.mode, RecvMode::Progressive(x) if x <= bytes) {
+                        Some(body.codec.data_received(
+                            &self.inbuf.in_buf[..bytes], false)?)
+                    } else {
+                        None
+                    };
+                    match operation {
+                        Some(Async::Ready(consumed)) => {
+                            body.progress.consume(&mut self.inbuf, consumed);
+                            if done && consumed == bytes {
+                                changed = true;
+                                self.waiting.push_back(
+                                    (body.response_config, body.codec));
+                                (Headers, true)
+                            } else {
+                                (Body(body), true)
+                            }
+                        }
+                        Some(Async::NotReady) => {
+                            if matches!(body.mode, RecvMode::Progressive(x) if x > bytes) {
+                                (Body(body), false)
+                            } else {
+                                (Body(body), true)
+                            }
+                        }
+                        None => (Body(body), true),
+                    }
+                }
                 Hijack => (Hijack, false),
                 Closed => unreachable!(),
             };
@@ -130,23 +169,24 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
         use server::RecvMode::{BufferedUpfront, Progressive};
         loop {
             let (next, cont) = match mem::replace(&mut self.writing, Void) {
-                Idle(io) => {
+                Idle(mut io) => {
+                    io.flush()?;
                     if let Some((rc, mut codec)) = self.waiting.pop_front() {
                         let e = encoder::new(io, rc);
                         (Write(codec.start_response(e)), true)
                     } else {
                         match self.reading {
-                            Body { mode: BufferedUpfront(..), ..}
+                            Body(BodyState { mode: BufferedUpfront(..), ..})
                             | Closed | Headers
                             => {
                                 (Idle(io), false)
                             }
-                            Body { mode: RecvMode::Hijack, ..} => {
+                            Body(BodyState { mode: RecvMode::Hijack, ..}) => {
                                 unreachable!();
                             }
-                            Body {
+                            Body(BodyState {
                                 mode: Progressive(_),
-                                codec: ref mut codec, ..}
+                                codec: ref mut codec, ..})
                             => {
                                 // TODO(tailhook) start writing now
                                 unimplemented!();

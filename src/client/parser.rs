@@ -1,11 +1,11 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::str::from_utf8;
+use std::ascii::AsciiExt;
 
 use futures::{Future, Async, Poll};
 use tokio_core::io::Io;
 use httparse;
-use httparse::parse_chunk_size;
 use tk_bufstream::{ReadBuf, Buf};
 
 use enums::Version;
@@ -61,7 +61,7 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     if is_head || (code > 100 && code < 200) || code == 204 || code == 304 {
         for header in headers.iter() {
             // TODO(tailhook) check for transfer encoding and content-length
-            if headers::is_connection(header.name) {
+            if header.name.eq_ignore_ascii_case("Connection") {
                 if header.value.split(|&x| x == b',').any(headers::is_close) {
                     close = true;
                 }
@@ -71,7 +71,7 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     }
     let mut result = BodyKind::Eof;
     for header in headers.iter() {
-        if headers::is_transfer_encoding(header.name) {
+        if header.name.eq_ignore_ascii_case("Transfer-Encoding") {
             if let Some(enc) = header.value.split(|&x| x == b',').last() {
                 if headers::is_chunked(enc) {
                     if has_content_length {
@@ -81,7 +81,7 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
                     result = Chunked;
                 }
             }
-        } else if headers::is_content_length(header.name) {
+        } else if header.name.eq_ignore_ascii_case("Content-Length") {
             if has_content_length {
                 // duplicate content_length
                 return Err(Error::DuplicateContentLength);
@@ -97,7 +97,7 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
                 // tralsfer-encoding has preference and don't allow keep-alive
                 close = true;
             }
-        } else if headers::is_connection(header.name) {
+        } else if header.name.eq_ignore_ascii_case("Connection") {
             if header.value.split(|&x| x == b',').any(headers::is_close) {
                 close = true;
             }
@@ -228,7 +228,7 @@ impl<S: Io, C: Codec<S>> Parser<S, C> {
         loop {
             match self.state {
                 Headers {..} => unreachable!(),
-                Body { ref mut mode, ref mut progress } => {
+                Body { ref mode, ref mut progress } => {
                     progress.parse(&mut io)?;
                     let (bytes, done) = progress.check_buf(&io);
                     let operation = if done {

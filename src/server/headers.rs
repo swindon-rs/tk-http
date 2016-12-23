@@ -1,9 +1,8 @@
-use std::mem;
 use std::str::from_utf8;
 use std::ascii::AsciiExt;
 use std::borrow::Cow;
 
-use httparse::{self, EMPTY_HEADER, Request, Header, parse_chunk_size};
+use httparse::{self, EMPTY_HEADER, Request, Header};
 use tokio_core::io::Io;
 use tk_bufstream::Buf;
 
@@ -22,7 +21,6 @@ const MAX_HEADERS: usize = 1024;
 
 struct RequestConfig<'a> {
     body: BodyKind,
-    is_head: bool,
     expect_continue: bool,
     connection_close: bool,
     connection: Option<Cow<'a, str>>,
@@ -135,9 +133,7 @@ fn scan_headers<'x>(raw_request: &'x Request)
     // 4. In all other cases the request is a bad request.
     use super::codec::BodyKind::*;
     use super::Error::*;
-    use super::RequestTarget::*;
 
-    let is_head = raw_request.method.unwrap() == "HEAD";
     let mut has_content_length = false;
     let mut close = raw_request.version.unwrap() == 0;
     let mut expect_continue = false;
@@ -213,7 +209,6 @@ fn scan_headers<'x>(raw_request: &'x Request)
     }
     Ok(RequestConfig {
         body: body,
-        is_head: is_head,
         expect_continue: expect_continue,
         connection: connection,
         host: host,
@@ -260,6 +255,7 @@ pub fn parse_headers<S, D>(buffer: &mut Buf, disp: &mut D)
                     connection_header: cfg.connection,
                 };
                 let codec = disp.headers_received(&head)?;
+                // TODO(tailhook) send 100-expect response headers
                 let response_config = ResponseConfig::from(&head);
                 (cfg.body, codec, response_config, bytes)
             }

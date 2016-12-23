@@ -12,26 +12,25 @@ use tokio_core::reactor::Core;
 use tokio_core::net::{TcpListener};
 use tokio_core::io::Io;
 use futures::{Stream, Future};
+use futures::future::{FutureResult, ok};
 
-use minihttp::{Status, OptFuture};
-use minihttp::server::buffered::{Service, Request, BufferedDispatcher};
+use minihttp::Status;
+use minihttp::server::buffered::{Request, BufferedDispatcher};
 use minihttp::server::{Encoder, EncoderDone, Config, Proto, Error};
 
 #[derive(Clone)]
 struct HelloWorld;
 
-impl<S: Io> Service<S> for HelloWorld {
-    fn call(&mut self, req: Request, mut e: Encoder<S>)
-        -> OptFuture<EncoderDone<S>, Error>
-    {
-        println!("{:?} {}", req.method(), req.path());
-        e.status(Status::Ok);
-        e.add_chunked().unwrap();
-        if e.done_headers().unwrap() {
-            e.write_body(b"Hello world!");
-        }
-        OptFuture::Value(Ok(e.done()))
+fn service<S:Io>(req: Request, mut e: Encoder<S>)
+    -> FutureResult<EncoderDone<S>, Error>
+{
+    println!("{:?} {}", req.method(), req.path());
+    e.status(Status::Ok);
+    e.add_chunked().unwrap();
+    if e.done_headers().unwrap() {
+        e.write_body(b"Hello world!");
     }
+    ok(e.done())
 }
 
 
@@ -51,7 +50,7 @@ fn main() {
         .map_err(|e| { println!("Accept error: {}", e); })
         .map(|(socket, addr)| {
             Proto::new(socket, &cfg,
-                BufferedDispatcher::new(addr, HelloWorld))
+                BufferedDispatcher::new(addr, || service))
             .map_err(|e| { println!("Connection error: {}", e); })
         })
         .buffer_unordered(200000)
