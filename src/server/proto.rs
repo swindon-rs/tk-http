@@ -10,19 +10,14 @@ use super::encoder::{self, get_inner, ResponseConfig};
 use super::{Dispatcher, Codec, Error, EncoderDone, Config, RecvMode};
 use super::headers::parse_headers;
 use super::codec::BodyKind;
+use chunked;
+use body_parser::BodyProgress;
 
 
 enum OutState<S: Io, F> {
     Idle(WriteBuf<S>),
     Write(F),
     Void,
-}
-
-// TODO(tailhook) review usizes here, probaby we may accept u64
-#[derive(Debug, Clone)]
-enum BodyProgress {
-    Fixed(usize), // bytes left
-    Chunked { buffered: usize, pending_chunk: usize, done: bool },
 }
 
 enum InState<C> {
@@ -47,6 +42,24 @@ pub struct Proto<S: Io, D: Dispatcher<S>> {
     config: Arc<Config>,
 }
 
+fn new_body(mode: BodyKind, recv_mode: RecvMode)
+    -> Result<BodyProgress, Error>
+{
+    use super::codec::BodyKind as B;
+    use super::RecvMode as M;
+    use super::Error::*;
+    use body_parser::BodyProgress as P;
+    match (mode, recv_mode) {
+        // TODO(tailhook) check size < usize
+        (B::Unsupported, _) => Err(Error::UnsupportedBody),
+        (B::Fixed(x), M::BufferedUpfront(b)) if x > b as u64 => {
+            Err(Error::RequestTooLong)
+        }
+        (B::Fixed(x), _)  => Ok(P::Fixed(x as usize)),
+        (B::Chunked, _) => Ok(P::Chunked(chunked::State::new())),
+    }
+}
+
 impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
     /// Create a new protocol implementation from a TCP connection and a config
     ///
@@ -60,30 +73,6 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
             waiting: VecDeque::with_capacity(cfg.inflight_request_prealloc),
             writing: OutState::Idle(cout),
             config: cfg.clone(),
-        }
-    }
-}
-
-fn start_reading(body_kind: BodyKind, mode: RecvMode)
-    -> Result<BodyProgress, Error>
-{
-    use super::codec::BodyKind::*;
-    use super::codec::RecvMode::*;
-    use super::Error::*;
-
-    match (body_kind, mode) {
-        (Unsupported, _) => {
-            Err(UnsupportedBody)
-        }
-        (Fixed(x), BufferedUpfront(y)) if x > y as u64 => {
-            Err(RequestTooLong)
-        }
-        (Fixed(x), _) => {
-            Ok(BodyProgress::Fixed(x as usize))
-        }
-        (Chunked, _) => {
-            Ok(BodyProgress::Chunked { buffered: 0, pending_chunk: 0,
-                                       done: false })
         }
     }
 }
@@ -116,7 +105,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                             } else {
                                 (Body { mode: mode,
                                         response_config: cfg,
-                                        progress: start_reading(body, mode)?,
+                                        progress: new_body(body, mode)?,
                                         codec: codec },
                                  true)
                             }
