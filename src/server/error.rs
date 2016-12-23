@@ -39,5 +39,11 @@ quick_error! {
         DuplicateContentLength {
             description("duplicate content length header")
         }
+        UnsupportedBody {
+            description("this kind of request body is not supported (CONNECT)")
+        }
+        RequestTooLong {
+            description("request body is too big")
+        }
     }
 }

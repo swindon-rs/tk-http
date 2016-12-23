@@ -8,6 +8,8 @@ use tokio_core::io::Io;
 
 use super::encoder::{self, get_inner, ResponseConfig};
 use super::{Dispatcher, Codec, Error, EncoderDone, Config, RecvMode};
+use super::headers::parse_headers;
+use super::codec::BodyKind;
 
 
 enum OutState<S: Io, F> {
@@ -31,6 +33,7 @@ enum InState<C> {
         response_config: ResponseConfig,
         codec: C,
     },
+    Hijack,
     Closed,
 }
 
@@ -61,6 +64,30 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
     }
 }
 
+fn start_reading(body_kind: BodyKind, mode: RecvMode)
+    -> Result<BodyProgress, Error>
+{
+    use super::codec::BodyKind::*;
+    use super::codec::RecvMode::*;
+    use super::Error::*;
+
+    match (body_kind, mode) {
+        (Unsupported, _) => {
+            Err(UnsupportedBody)
+        }
+        (Fixed(x), BufferedUpfront(y)) if x > y as u64 => {
+            Err(RequestTooLong)
+        }
+        (Fixed(x), _) => {
+            Ok(BodyProgress::Fixed(x as usize))
+        }
+        (Chunked, _) => {
+            Ok(BodyProgress::Chunked { buffered: 0, pending_chunk: 0,
+                                       done: false })
+        }
+    }
+}
+
 impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
     /// Resturns Ok(true) if new data has been read
     fn do_reads(&mut self) -> Result<bool, Error> {
@@ -70,16 +97,35 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
             let limit = match self.reading {
                 Headers => self.config.inflight_request_limit,
                 Body { .. } => self.config.inflight_request_limit-1,
-                Closed => return Ok(changed),
+                Closed | Hijack => return Ok(changed),
             };
             if self.waiting.len() >= limit {
                 break;
             }
-            let (next, cont): (_, bool) = match mem::replace(&mut self.reading, Closed) {
+            // TODO(tailhook) Do reads alter parse_headers() [optimization]
+            self.inbuf.read()?;
+            let (next, cont) = match mem::replace(&mut self.reading, Closed) {
                 Headers => {
-                    unimplemented!();
+                    match parse_headers(&mut self.inbuf.in_buf,
+                                        &mut self.dispatcher)?
+                    {
+                        Some((body, mut codec, cfg)) => {
+                            let mode = codec.recv_mode();
+                            if mode == RecvMode::Hijack {
+                                (Hijack, true)
+                            } else {
+                                (Body { mode: mode,
+                                        response_config: cfg,
+                                        progress: start_reading(body, mode)?,
+                                        codec: codec },
+                                 true)
+                            }
+                        }
+                        None => (Headers, false),
+                    }
                 }
                 Body { .. } => unimplemented!(),
+                Hijack => (Hijack, false),
                 Closed => unreachable!(),
             };
             self.reading = next;
@@ -106,13 +152,17 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                             => {
                                 (Idle(io), false)
                             }
-                            InState::Body {
+                            Body { mode: RecvMode::Hijack, ..} => {
+                                unreachable!();
+                            }
+                            Body {
                                 mode: Progressive(_),
                                 codec: ref mut codec, ..}
                             => {
                                 // TODO(tailhook) start writing now
                                 unimplemented!();
                             }
+                            Hijack => unimplemented!(),
                         }
                     }
                 }

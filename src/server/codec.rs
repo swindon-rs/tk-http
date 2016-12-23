@@ -10,6 +10,7 @@ use {Version, OptFuture};
 pub enum BodyKind {
     Fixed(u64),
     Chunked,
+    Unsupported,
 }
 
 /// This type is returned from `headers_received` handler of either
@@ -49,6 +50,10 @@ pub enum RecvMode {
     /// request body as a persistent connection for sending multiple messages
     /// on-demand)
     Progressive(usize),
+    /// Don't read request body and hijack connection after response headers
+    /// are sent. Useful for connection upgrades, including websockets and
+    /// for CONNECT method.
+    Hijack,
 }
 
 /// This is a low-level interface to the http server

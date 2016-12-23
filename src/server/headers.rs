@@ -208,6 +208,9 @@ fn scan_headers<'x>(raw_request: &'x Request)
             }
         }
     }
+    if raw_request.method.unwrap() == "CONNECT" {
+        body = Unsupported;
+    }
     Ok(RequestConfig {
         body: body,
         is_head: is_head,
@@ -220,12 +223,12 @@ fn scan_headers<'x>(raw_request: &'x Request)
     })
 }
 
-fn parse_headers<S, D>(buffer: &mut Buf, disp: &mut D)
-    -> Result<Option<(D::Codec, ResponseConfig)>, Error>
+pub fn parse_headers<S, D>(buffer: &mut Buf, disp: &mut D)
+    -> Result<Option<(BodyKind, D::Codec, ResponseConfig)>, Error>
     where S: Io,
           D: Dispatcher<S>,
 {
-    let (codec, cfg, bytes) = {
+    let (body_kind, codec, cfg, bytes) = {
         let mut vec;
         let mut headers = [EMPTY_HEADER; MIN_HEADERS];
 
@@ -258,11 +261,11 @@ fn parse_headers<S, D>(buffer: &mut Buf, disp: &mut D)
                 };
                 let codec = disp.headers_received(&head)?;
                 let response_config = ResponseConfig::from(&head);
-                (codec, response_config, bytes)
+                (cfg.body, codec, response_config, bytes)
             }
             _ => return Ok(None),
         }
     };
     buffer.consume(bytes);
-    Ok(Some((codec, cfg)))
+    Ok(Some((body_kind, codec, cfg)))
 }
