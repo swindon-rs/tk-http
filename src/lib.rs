@@ -23,6 +23,7 @@ mod headers;
 mod base_serializer;
 mod opt_future;
 mod chunked;
+mod body_parser;
 
 pub use enums::{Version, Status};
 pub use opt_future::OptFuture;

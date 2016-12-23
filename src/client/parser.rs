@@ -12,6 +12,7 @@ use enums::Version;
 use client::client::{BodyKind, RecvMode, Head};
 use headers;
 use chunked;
+use body_parser::BodyProgress;
 use client::encoder::RequestState;
 use client::{Codec, Error};
 
@@ -21,14 +22,6 @@ const MIN_HEADERS: usize = 16;
 /// A hard limit on the number of headers
 const MAX_HEADERS: usize = 1024;
 
-
-// TODO(tailhook) review usizes here, probaby we may accept u64
-#[derive(Debug, Clone)]
-enum BodyProgress {
-    Fixed(usize), // bytes left
-    Eof,
-    Chunked(chunked::State),
-}
 
 #[derive(Debug, Clone)]
 enum State {
@@ -49,49 +42,6 @@ pub struct Parser<S: Io, C: Codec<S>> {
     state: State,
 }
 
-impl BodyProgress {
-    fn new(mode: BodyKind) -> BodyProgress {
-        use client::client::BodyKind as B;
-        use self::{BodyProgress as P};
-        match mode {
-            // TODO(tailhook) check size < usize
-            B::Fixed(x) => P::Fixed(x as usize),
-            B::Chunked => P::Chunked(chunked::State::new()),
-            B::Eof => P::Eof,
-        }
-    }
-    /// Returns useful number of bytes in buffer and "end" ("done") flag
-    fn check_buf<S: Io>(&self, io: &ReadBuf<S>) -> (usize, bool) {
-        use self::BodyProgress::*;
-        match *self {
-            Fixed(x) if x <= io.in_buf.len() => (x, true),
-            Fixed(_) => (io.in_buf.len(), false),
-            Chunked(ref s) => (s.buffered(), s.is_done()),
-            Eof => (io.in_buf.len(), io.done()),
-        }
-    }
-    fn parse<S: Io>(&mut self, io: &mut ReadBuf<S>) -> Result<(), Error> {
-        use self::BodyProgress::*;
-        match *self {
-            Fixed(_) => {},
-            Chunked(ref mut s) => s.parse(&mut io.in_buf)?,
-            Eof => {}
-        }
-        Ok(())
-    }
-    fn consume<S: Io>(&mut self, io: &mut ReadBuf<S>, n: usize) {
-        use self::BodyProgress::*;
-        io.in_buf.consume(n);
-        match *self {
-            Fixed(ref mut x) => {
-                assert!(*x >= n);
-                *x -= n;
-            }
-            Chunked(ref mut s) => s.consume(n),
-            Eof => {}
-        }
-    }
-}
 
 fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     -> Result<(BodyKind, bool), Error>
@@ -156,6 +106,24 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     Ok((result, close))
 }
 
+fn new_body(mode: BodyKind, recv_mode: RecvMode)
+    -> Result<BodyProgress, Error>
+{
+    use super::client::BodyKind as B;
+    use super::client::RecvMode as M;
+    use super::Error::*;
+    use body_parser::BodyProgress as P;
+    match (mode, recv_mode) {
+        // TODO(tailhook) check size < usize
+        (B::Fixed(x), M::Buffered(b)) if x < b as u64 => {
+            Err(RequestBodyTooLong)
+        }
+        (B::Fixed(x), _)  => Ok(P::Fixed(x as usize)),
+        (B::Chunked, _) => Ok(P::Chunked(chunked::State::new())),
+        (B::Eof, _) => Ok(P::Eof),
+    }
+}
+
 fn parse_headers<S: Io, C: Codec<S>>(
     buffer: &mut Buf, codec: &mut C, is_head: bool)
     -> Result<Option<(State, bool)>, Error>
@@ -199,7 +167,7 @@ fn parse_headers<S: Io, C: Codec<S>>(
     Ok(Some((
         State::Body {
             mode: mode,
-            progress: BodyProgress::new(body),
+            progress: new_body(body, mode)?,
         },
         close,
     )))

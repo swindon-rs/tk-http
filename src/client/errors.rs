@@ -87,6 +87,10 @@ quick_error! {
         PoolError {
             description("error sending a request to a connection pool")
         }
+        /// Request body is too big (happens only in buffered mode)
+        RequestBodyTooLong {
+            description("request body too long")
+        }
     }
 }
 
