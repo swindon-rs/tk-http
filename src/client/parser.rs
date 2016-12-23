@@ -11,6 +11,7 @@ use tk_bufstream::{ReadBuf, Buf};
 use enums::Version;
 use client::client::{BodyKind, RecvMode, Head};
 use headers;
+use chunked;
 use client::encoder::RequestState;
 use client::{Codec, Error};
 
@@ -26,7 +27,7 @@ const MAX_HEADERS: usize = 1024;
 enum BodyProgress {
     Fixed(usize), // bytes left
     Eof,
-    Chunked { buffered: usize, pending_chunk: usize, done: bool },
+    Chunked(chunked::State),
 }
 
 #[derive(Debug, Clone)]
@@ -55,11 +56,7 @@ impl BodyProgress {
         match mode {
             // TODO(tailhook) check size < usize
             B::Fixed(x) => P::Fixed(x as usize),
-            B::Chunked => P::Chunked {
-                buffered: 0,
-                pending_chunk: 0,
-                done: false
-            },
+            B::Chunked => P::Chunked(chunked::State::new()),
             B::Eof => P::Eof,
         }
     }
@@ -69,7 +66,7 @@ impl BodyProgress {
         match *self {
             Fixed(x) if x <= io.in_buf.len() => (x, true),
             Fixed(_) => (io.in_buf.len(), false),
-            Chunked { buffered: x, done, .. } => (x, done),
+            Chunked(ref s) => (s.buffered(), s.is_done()),
             Eof => (io.in_buf.len(), io.done()),
         }
     }
@@ -77,39 +74,7 @@ impl BodyProgress {
         use self::BodyProgress::*;
         match *self {
             Fixed(_) => {},
-            Chunked { ref mut buffered, ref mut pending_chunk, ref mut done }
-            => {
-                while *buffered < io.in_buf.len() {
-                    if *pending_chunk == 0 {
-                        use httparse::Status::*;
-                        match parse_chunk_size(&io.in_buf[*buffered..])? {
-                            Complete((bytes, 0)) => {
-                                io.in_buf.remove_range(
-                                    *buffered..*buffered+bytes);
-                                *done = true;
-                            }
-                            Complete((bytes, chunk_size)) => {
-                                // TODO(tailhook) optimized multiple removes
-                                io.in_buf.remove_range(
-                                    *buffered..*buffered+bytes);
-                                // TODO(tailhook) check that chunk_size < u32
-                                *pending_chunk = chunk_size as usize;
-                            }
-                            Partial => {
-                                return Ok(());
-                            }
-                        }
-                    } else {
-                        if *buffered + *pending_chunk <= io.in_buf.len() {
-                            *buffered += *pending_chunk;
-                            *pending_chunk = 0;
-                        } else {
-                            *pending_chunk -= io.in_buf.len() - *buffered;
-                            *buffered = io.in_buf.len();
-                        }
-                    }
-                }
-            }
+            Chunked(ref mut s) => s.parse(&mut io.in_buf)?,
             Eof => {}
         }
         Ok(())
@@ -122,10 +87,7 @@ impl BodyProgress {
                 assert!(*x >= n);
                 *x -= n;
             }
-            Chunked { buffered: ref mut x, .. } => {
-                assert!(*x >= n);
-                *x -= n;
-            }
+            Chunked(ref mut s) => s.consume(n),
             Eof => {}
         }
     }
