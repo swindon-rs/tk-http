@@ -18,8 +18,6 @@ use minihttp::Status;
 use minihttp::server::buffered::{Request, BufferedDispatcher};
 use minihttp::server::{Encoder, EncoderDone, Config, Proto, Error};
 
-#[derive(Clone)]
-struct HelloWorld;
 
 fn service<S:Io>(req: Request, mut e: Encoder<S>)
     -> FutureResult<EncoderDone<S>, Error>
