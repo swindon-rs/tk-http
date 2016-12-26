@@ -5,8 +5,11 @@ mod error;
 mod codec;
 mod proto;
 mod encoder;
+<<<<<<< Updated upstream
 mod request_target;
+=======
 mod headers;
+>>>>>>> Stashed changes
 pub mod buffered;
 
 pub use self::error::Error;
@@ -14,7 +17,6 @@ pub use self::encoder::{Encoder, EncoderDone};
 pub use self::codec::{Codec, Dispatcher, RecvMode};
 pub use self::proto::Proto;
 pub use self::headers::Head;
-pub use self::request_target::RequestTarget;
 
 
 /// Fine-grained configuration of the HTTP server

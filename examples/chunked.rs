@@ -1,5 +1,4 @@
 extern crate tokio_core;
-extern crate tokio_service;
 extern crate futures;
 extern crate tk_bufstream;
 extern crate netbuf;
@@ -10,34 +9,26 @@ extern crate env_logger;
 use std::env;
 
 use tokio_core::reactor::Core;
-use tokio_core::net::TcpStream;
-use tokio_service::Service;
-use tk_bufstream::IoBuf;
-use futures::{Finished, finished};
+use tokio_core::net::{TcpListener};
+use tokio_core::io::Io;
+use futures::{Stream, Future};
+use futures::future::{FutureResult, ok};
 
-use minihttp::enums::Status;
-use minihttp::server::{ResponseFn, Error, Request};
+use minihttp::Status;
+use minihttp::server::buffered::{Request, BufferedDispatcher};
+use minihttp::server::{Encoder, EncoderDone, Config, Proto, Error};
 
-#[derive(Clone)]
-struct HelloWorld;
 
-impl Service for HelloWorld {
-    type Request = Request;
-    type Response = ResponseFn<Finished<IoBuf<TcpStream>, Error>, TcpStream>;
-    type Error = Error;
-    type Future = Finished<Self::Response, Error>;
-
-    fn call(&self, req: Self::Request) -> Self::Future {
-        println!("{:?} {}", req.method, req.path);
-        finished(ResponseFn::new(move |mut res| {
-            res.status(Status::Ok);
-            res.add_chunked().unwrap();
-            if res.done_headers().unwrap() {
-                res.write_body(b"Hello world!");
-            }
-            res.done()
-        }))
+fn service<S:Io>(req: Request, mut e: Encoder<S>)
+    -> FutureResult<EncoderDone<S>, Error>
+{
+    println!("{:?} {}", req.method(), req.path());
+    e.status(Status::Ok);
+    e.add_chunked().unwrap();
+    if e.done_headers().unwrap() {
+        e.write_body(b"Hello world!");
     }
+    ok(e.done())
 }
 
 
@@ -50,8 +41,18 @@ fn main() {
     let mut lp = Core::new().unwrap();
 
     let addr = "0.0.0.0:8080".parse().unwrap();
+    let listener = TcpListener::bind(&addr, &lp.handle()).unwrap();
+    let cfg = Config::new().done();
 
-    minihttp::serve(&lp.handle(), addr, || Ok(HelloWorld));
+    let done = listener.incoming()
+        .map_err(|e| { println!("Accept error: {}", e); })
+        .map(|(socket, addr)| {
+            Proto::new(socket, &cfg,
+                BufferedDispatcher::new(addr, || service))
+            .map_err(|e| { println!("Connection error: {}", e); })
+        })
+        .buffer_unordered(200000)
+          .for_each(|()| Ok(()));
 
-    lp.run(futures::empty::<(), ()>()).unwrap();
+    lp.run(done).unwrap();
 }

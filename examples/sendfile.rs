@@ -1,5 +1,4 @@
 extern crate tokio_core;
-extern crate tokio_service;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate netbuf;
@@ -16,55 +15,15 @@ use std::path::PathBuf;
 
 use argparse::{ArgumentParser, Parse};
 use tokio_core::reactor::Core;
-use tokio_core::net::TcpStream;
-use tokio_service::Service;
-use futures::{BoxFuture, Future};
+use tokio_core::net::{TcpListener};
+use futures::{Stream, Future};
 use futures_cpupool::CpuPool;
-use tk_bufstream::IoBuf;
 use tk_sendfile::DiskPool;
+use futures::future::{ok};
 
-use minihttp::enums::Status;
-use minihttp::server::{ResponseWriter, GenericResponse, Error, Request};
-
-#[derive(Clone)]
-struct HelloWorld {
-    pool: DiskPool,
-    path: PathBuf,
-}
-
-struct Response(DiskPool, PathBuf);
-
-impl GenericResponse<TcpStream> for Response {
-    type Future = BoxFuture<IoBuf<TcpStream>, Error>;
-    fn into_serializer(self, mut response: ResponseWriter<TcpStream>)
-        -> Self::Future
-    {
-        self.0.open(self.1)
-        .and_then(move |file| {
-            response.status(Status::Ok);
-            response.add_length(file.size()).unwrap();
-            if response.done_headers().unwrap() {
-                response.steal_socket()
-                .and_then(|stream| file.write_into(stream))
-            } else {
-                // Don't send any body
-                unimplemented!();
-            }
-        }).map_err(|e| e.into()).boxed()
-    }
-}
-
-impl Service for HelloWorld {
-    type Request = Request;
-    type Response = Response;
-    type Error = Error;
-    type Future = futures::Finished<Self::Response, Self::Error>;
-
-    fn call(&self, _req: Self::Request) -> Self::Future {
-        futures::finished(Response(self.pool.clone(), self.path.clone()))
-    }
-}
-
+use minihttp::Status;
+use minihttp::server::buffered::{BufferedDispatcher};
+use minihttp::server::{Encoder, Config, Proto, Error};
 
 fn main() {
     let mut filename = PathBuf::from("examples/sendfile.rs");
@@ -86,15 +45,37 @@ fn main() {
     }
     env_logger::init().expect("init logging");
 
-    let disk_pool = DiskPool::new(CpuPool::new(40));
-
     let mut lp = Core::new().unwrap();
-    let svc = HelloWorld {
-        pool: disk_pool,
-        path: filename,
-    };
+    let listener = TcpListener::bind(&addr, &lp.handle()).unwrap();
+    let disk_pool = DiskPool::new(CpuPool::new(40));
+    let cfg = Config::new().done();
 
-    minihttp::serve(&lp.handle(), addr, move || Ok(svc.clone()));
+    let done = listener.incoming()
+        .map_err(|e| { println!("Accept error: {}", e); })
+        .map(|(socket, addr)| {
+            Proto::new(socket, &cfg,
+                BufferedDispatcher::new(addr, || |_req, mut e: Encoder<_>| {
 
-    lp.run(futures::empty::<(), ()>()).unwrap();
+                    disk_pool.open(filename.clone())
+                    .and_then(move |file| {
+                        e.status(Status::Ok);
+                        e.add_length(file.size()).unwrap();
+                        if e.done_headers().unwrap() {
+                            e.raw_body()
+                            .and_then(|raw_body| file.write_into(raw_body))
+                            .map(|raw_body| raw_body.done())
+                            .boxed()
+                        } else {
+                            ok(e.done()).boxed()
+                        }
+                    })
+                    .map_err(|_| -> Error { unimplemented!(); })
+
+                }))
+            .map_err(|e| { println!("Connection error: {}", e); })
+        })
+        .buffer_unordered(200000)
+          .for_each(|()| Ok(()));
+
+    lp.run(done).unwrap();
 }

@@ -1,33 +1,27 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::str::from_utf8;
+use std::ascii::AsciiExt;
 
 use futures::{Future, Async, Poll};
 use tokio_core::io::Io;
 use httparse;
-use httparse::parse_chunk_size;
 use tk_bufstream::{ReadBuf, Buf};
 
 use enums::Version;
 use client::client::{BodyKind, RecvMode, Head};
 use headers;
+use chunked;
+use body_parser::BodyProgress;
 use client::encoder::RequestState;
 use client::{Codec, Error};
 
 
-/// Number of headers to allocate on stack
+/// Number of headers to allocate on a stack
 const MIN_HEADERS: usize = 16;
 /// A hard limit on the number of headers
 const MAX_HEADERS: usize = 1024;
 
-
-// TODO(tailhook) review usizes here, probaby we may accept u64
-#[derive(Debug, Clone)]
-enum BodyProgress {
-    Fixed(usize), // bytes left
-    Eof, // bytes left
-    Chunked { buffered: usize, pending_chunk: usize, done: bool },
-}
 
 #[derive(Debug, Clone)]
 enum State {
@@ -48,88 +42,6 @@ pub struct Parser<S: Io, C: Codec<S>> {
     state: State,
 }
 
-impl BodyProgress {
-    fn new(mode: BodyKind) -> BodyProgress {
-        use client::client::BodyKind as B;
-        use self::{BodyProgress as P};
-        match mode {
-            // TODO(tailhook) check size < usize
-            B::Fixed(x) => P::Fixed(x as usize),
-            B::Chunked => P::Chunked {
-                buffered: 0,
-                pending_chunk: 0,
-                done: false
-            },
-            B::Eof => P::Eof,
-        }
-    }
-    /// Returns useful number of bytes in buffer and "end" ("done") flag
-    fn check_buf<S: Io>(&self, io: &ReadBuf<S>) -> (usize, bool) {
-        use self::BodyProgress::*;
-        match *self {
-            Fixed(x) if x <= io.in_buf.len() => (x, true),
-            Fixed(_) => (io.in_buf.len(), false),
-            Chunked { buffered: x, done, .. } => (x, done),
-            Eof => (io.in_buf.len(), io.done()),
-        }
-    }
-    fn parse<S: Io>(&mut self, io: &mut ReadBuf<S>) -> Result<(), Error> {
-        use self::BodyProgress::*;
-        match *self {
-            Fixed(_) => {},
-            Chunked { ref mut buffered, ref mut pending_chunk, ref mut done }
-            => {
-                while *buffered < io.in_buf.len() {
-                    if *pending_chunk == 0 {
-                        use httparse::Status::*;
-                        match parse_chunk_size(&io.in_buf[*buffered..])? {
-                            Complete((bytes, 0)) => {
-                                io.in_buf.remove_range(
-                                    *buffered..*buffered+bytes);
-                                *done = true;
-                            }
-                            Complete((bytes, chunk_size)) => {
-                                // TODO(tailhook) optimized multiple removes
-                                io.in_buf.remove_range(
-                                    *buffered..*buffered+bytes);
-                                // TODO(tailhook) check that chunk_size < u32
-                                *pending_chunk = chunk_size as usize;
-                            }
-                            Partial => {
-                                return Ok(());
-                            }
-                        }
-                    } else {
-                        if *buffered + *pending_chunk <= io.in_buf.len() {
-                            *buffered += *pending_chunk;
-                            *pending_chunk = 0;
-                        } else {
-                            *pending_chunk -= io.in_buf.len() - *buffered;
-                            *buffered = io.in_buf.len();
-                        }
-                    }
-                }
-            }
-            Eof => {}
-        }
-        Ok(())
-    }
-    fn consume<S: Io>(&mut self, io: &mut ReadBuf<S>, n: usize) {
-        use self::BodyProgress::*;
-        io.in_buf.consume(n);
-        match *self {
-            Fixed(ref mut x) => {
-                assert!(*x >= n);
-                *x -= n;
-            }
-            Chunked { buffered: ref mut x, .. } => {
-                assert!(*x >= n);
-                *x -= n;
-            }
-            Eof => {}
-        }
-    }
-}
 
 fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     -> Result<(BodyKind, bool), Error>
@@ -149,7 +61,7 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     if is_head || (code > 100 && code < 200) || code == 204 || code == 304 {
         for header in headers.iter() {
             // TODO(tailhook) check for transfer encoding and content-length
-            if headers::is_connection(header.name) {
+            if header.name.eq_ignore_ascii_case("Connection") {
                 if header.value.split(|&x| x == b',').any(headers::is_close) {
                     close = true;
                 }
@@ -159,7 +71,7 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     }
     let mut result = BodyKind::Eof;
     for header in headers.iter() {
-        if headers::is_transfer_encoding(header.name) {
+        if header.name.eq_ignore_ascii_case("Transfer-Encoding") {
             if let Some(enc) = header.value.split(|&x| x == b',').last() {
                 if headers::is_chunked(enc) {
                     if has_content_length {
@@ -169,7 +81,7 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
                     result = Chunked;
                 }
             }
-        } else if headers::is_content_length(header.name) {
+        } else if header.name.eq_ignore_ascii_case("Content-Length") {
             if has_content_length {
                 // duplicate content_length
                 return Err(Error::DuplicateContentLength);
@@ -185,13 +97,31 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
                 // tralsfer-encoding has preference and don't allow keep-alive
                 close = true;
             }
-        } else if headers::is_connection(header.name) {
+        } else if header.name.eq_ignore_ascii_case("Connection") {
             if header.value.split(|&x| x == b',').any(headers::is_close) {
                 close = true;
             }
         }
     }
     Ok((result, close))
+}
+
+fn new_body(mode: BodyKind, recv_mode: RecvMode)
+    -> Result<BodyProgress, Error>
+{
+    use super::client::BodyKind as B;
+    use super::client::RecvMode as M;
+    use super::Error::*;
+    use body_parser::BodyProgress as P;
+    match (mode, recv_mode) {
+        // TODO(tailhook) check size < usize
+        (B::Fixed(x), M::Buffered(b)) if x < b as u64 => {
+            Err(RequestBodyTooLong)
+        }
+        (B::Fixed(x), _)  => Ok(P::Fixed(x as usize)),
+        (B::Chunked, _) => Ok(P::Chunked(chunked::State::new())),
+        (B::Eof, _) => Ok(P::Eof),
+    }
 }
 
 fn parse_headers<S: Io, C: Codec<S>>(
@@ -237,7 +167,7 @@ fn parse_headers<S: Io, C: Codec<S>>(
     Ok(Some((
         State::Body {
             mode: mode,
-            progress: BodyProgress::new(body),
+            progress: new_body(body, mode)?,
         },
         close,
     )))
@@ -298,7 +228,7 @@ impl<S: Io, C: Codec<S>> Parser<S, C> {
         loop {
             match self.state {
                 Headers {..} => unreachable!(),
-                Body { ref mut mode, ref mut progress } => {
+                Body { ref mode, ref mut progress } => {
                     progress.parse(&mut io)?;
                     let (bytes, done) = progress.check_buf(&io);
                     let operation = if done {

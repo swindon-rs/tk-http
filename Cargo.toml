@@ -5,16 +5,18 @@ authors = ["Alexey Popravka <alexey.popravka@horsedevel.com>"]
 
 [dependencies]
 
-futures = "0.1.3"
+futures = "0.1.7"
 httparse = "1.1.2"
 tokio-core = "0.1.0"
-tokio-service = { git = "https://github.com/tokio-rs/tokio-service", rev="da47a93" }
-tk-bufstream = "0.2.1"
+#tk-bufstream = "0.2.1"
+tk-bufstream = { git = "https://github.com/tailhook/tk-bufstream", rev="4f3510e" }
 netbuf = "0.3.7"
 quick-error = "1.1.0"
 matches = "0.1.4"
 log = "0.3.6"
 url = "1.2.3"
+
+tk-sendfile = { version="0.3.0", optional=true }
 
 # for curl-rs and "simple" interface (may be move to another crate?)
 futures-cpupool = "0.1.2"
@@ -23,10 +25,13 @@ argparse = "0.2.1"
 env_logger = "0.3.5"
 ns-std-threaded = "0.1.0"
 
+[features]
+default = ["sendfile"]
+sendfile = ["tk-sendfile"]
+
 [dev-dependencies]
 env_logger = "0.3.5"
 argparse = "0.2.1"
-tk-sendfile = "0.3.0"
 futures-cpupool = "0.1.2"
 time = "0.1.35"
 

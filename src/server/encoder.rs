@@ -1,80 +1,54 @@
 use std::io;
 use std::fmt::Display;
 
-use futures::{Finished, finished};
-use tk_bufstream::IoBuf;
+use futures::{Async, Future, Poll};
 use tokio_core::io::Io;
-use tk_bufstream::Flushed;
+use tk_bufstream::{Flushed, WriteBuf, WriteRaw, FutureWriteRaw};
 
 use base_serializer::{MessageState, HeaderError};
 use enums::{Version, Status};
+use super::headers::Head;
+use super::Error;
 
 
-/// This response is returned when Response is dropping without writing
-/// anything to the buffer. In any real scenario this page must never appear.
-/// If it is, this probably means there is a bug somewhere. For example,
-/// emit_error_page has returned without creating a real error response.
-pub const NOT_IMPLEMENTED: &'static str = concat!(
-    "HTTP/1.0 501 Not Implemented\r\n",
-    "Content-Type: text/plain\r\n",
-    "Content-Length: 21\r\n",
-    "\r\n",
-    "501 Not Implemented\r\n",
-    );
-pub const NOT_IMPLEMENTED_HEAD: &'static str = concat!(
-    "HTTP/1.0 501 Not Implemented\r\n",
-    "Content-Type: text/plain\r\n",
-    "Content-Length: 21\r\n",
-    "\r\n",
-    );
-
-pub struct ResponseWriter<S: Io> {
+/// This a response writer that you receive in `Codec`
+///
+/// Methods of this structure ensure that everything you write into a buffer
+/// is consistent and valid protocol
+pub struct Encoder<S: Io> {
     state: MessageState,
-    io: IoBuf<S>,
+    io: WriteBuf<S>,
 }
 
+/// This structure returned from `Encoder::done` and works as a continuation
+/// that should be returned from the future that writes request.
+pub struct EncoderDone<S: Io> {
+    buf: WriteBuf<S>,
+}
+
+/// This structure contains all needed info to start response of the request
+/// in a correct manner
+///
+/// This is ought to be used in serializer only
+#[derive(Debug, Clone, Copy)]
+pub struct ResponseConfig {
+    /// Whether request is a HEAD request
+    pub is_head: bool,
+    /// Is `Connection: close` in request or HTTP version == 1.0
+    pub do_close: bool,
+    /// Version of HTTP request
+    pub version: Version,
+}
+
+pub struct FutureRawBody<S>(FutureWriteRaw<S>);
+
+pub struct RawBody<S> {
+    io: WriteRaw<S>,
+}
+
+
 // TODO: Support responses to CONNECT and `Upgrade: websocket` requests.
-impl<S: Io> ResponseWriter<S> {
-    /// Creates new response message by extracting needed fields from Head.
-    pub fn new(sock: IoBuf<S>, version: Version,
-        is_head: bool, do_close: bool) -> ResponseWriter<S>
-    {
-        use base_serializer::Body::*;
-
-        // TODO(tailhook) implement Connection: Close,
-        // (including explicit one in HTTP/1.0) and maybe others
-        ResponseWriter {
-            state: MessageState::ResponseStart {
-                body: if is_head { Head } else { Normal },
-                version: version,
-                close: do_close || version == Version::Http10,
-            },
-            io: sock,
-        }
-    }
-    /// Returns true if it's okay to proceed with keep-alive connection
-    pub fn finish(mut self) -> bool {
-        use base_serializer::MessageState::*;
-        use base_serializer::Body::*;
-        if self.is_complete() {
-            return true;
-        }
-        match self.state {
-            // If response is not even started yet, send something to make
-            // debugging easier
-            ResponseStart { body: Denied, .. }
-            | ResponseStart { body: Head, .. }
-            => {
-                self.io.out_buf.extend(NOT_IMPLEMENTED_HEAD.as_bytes());
-            }
-            ResponseStart { body: Normal, .. } => {
-                self.io.out_buf.extend(NOT_IMPLEMENTED.as_bytes());
-            }
-            _ => {}
-        }
-        return false;
-    }
-
+impl<S: Io> Encoder<S> {
     /// Write a 100 (Continue) response.
     ///
     /// A server should respond with the 100 status code if it receives a
@@ -239,9 +213,9 @@ impl<S: Io> ResponseWriter<S> {
     /// # Panics
     ///
     /// When the response is in the wrong state.
-    pub fn done<E>(mut self) -> Finished<IoBuf<S>, E> {
+    pub fn done(mut self) -> EncoderDone<S> {
         self.state.done(&mut self.io.out_buf);
-        finished(self.io)
+        EncoderDone { buf: self.io }
     }
     /// Returns a future which yields a socket when the buffer is flushed to
     /// the socket
@@ -255,11 +229,41 @@ impl<S: Io> ResponseWriter<S> {
     /// Currently method panics when done_headers is not called yet
     pub fn steal_socket(self) -> Flushed<S> {
         assert!(self.state.is_after_headers());
-        self.io.flushed()
+        unimplemented!()
+        //self.io.flushed()
+    }
+    /// Returns a raw body for zero-copy writing techniques
+    ///
+    /// Note: we don't assert on the format of the body if you're using this
+    /// interface.
+    ///
+    /// Note 2: RawBody (returned by this future) locks the underlying BiLock,
+    /// which basically means reading from this socket is not possible while
+    /// you're writing to the raw body.
+    ///
+    /// Good idea is to use interface like this:
+    ///
+    /// 1. Set appropriate content-length
+    /// 2. Write exactly this number of bytes or exit with error
+    ///
+    /// This is specifically designed for using with `sendfile`
+    ///
+    /// # Panics
+    ///
+    /// This method panics if it's called when headers are not written yet.
+    pub fn raw_body(self) -> FutureRawBody<S> {
+        assert!(self.state.is_after_headers());
+        FutureRawBody(self.io.borrow_raw())
     }
 }
 
-impl<S: Io> io::Write for ResponseWriter<S> {
+impl<S: Io> RawBody<S> {
+    pub fn done(mut self) -> EncoderDone<S> {
+        EncoderDone { buf: self.io.into_buf() }
+    }
+}
+
+impl<S: Io> io::Write for Encoder<S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         // TODO(tailhook) we might want to propatage error correctly
         // rather than panic
@@ -269,4 +273,71 @@ impl<S: Io> io::Write for ResponseWriter<S> {
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
+}
+
+impl<S: Io> io::Write for RawBody<S> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.io.write(buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.io.flush()
+    }
+}
+
+pub fn get_inner<S: Io>(e: EncoderDone<S>) -> WriteBuf<S> {
+    e.buf
+}
+
+pub fn new<S: Io>(io: WriteBuf<S>, cfg: ResponseConfig) -> Encoder<S> {
+    use base_serializer::Body::*;
+
+    // TODO(tailhook) implement Connection: Close,
+    // (including explicit one in HTTP/1.0) and maybe others
+    Encoder {
+        state: MessageState::ResponseStart {
+            body: if cfg.is_head { Head } else { Normal },
+            version: cfg.version,
+            close: cfg.do_close || cfg.version == Version::Http10,
+        },
+        io: io,
+    }
+}
+
+impl ResponseConfig {
+    pub fn from(req: &Head) -> ResponseConfig {
+        ResponseConfig {
+            version: req.version(),
+            is_head: req.method() == "HEAD",
+            do_close: req.connection_close(),
+        }
+    }
+}
+
+impl<S: Io> Future for FutureRawBody<S> {
+    type Item = RawBody<S>;
+    type Error = io::Error;
+    fn poll(&mut self) -> Poll<RawBody<S>, io::Error> {
+        self.0.poll().map(|x| x.map(|y| RawBody { io: y }))
+    }
+}
+
+#[cfg(feature="sendfile")]
+mod sendfile {
+    use std::io;
+    use futures::Async;
+    use tk_sendfile::{Destination, FileOpener, Sendfile};
+    use tokio_core::net::TcpStream;
+    use super::RawBody;
+
+    impl Destination for RawBody<TcpStream> {
+        fn write_file<O: FileOpener>(&mut self, file: &mut Sendfile<O>)
+            -> Result<usize, io::Error>
+        {
+            self.io.write_file(file)
+        }
+        fn poll_write(&mut self) -> Async<()> {
+            self.io.poll_write()
+        }
+    }
+
 }

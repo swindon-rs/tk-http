@@ -21,5 +21,32 @@ quick_error! {
             description("chunk size parse error")
             from()
         }
+        ConnectionReset {
+            description("connection reset")
+        }
+        BadRequestTarget {
+            description("error parsing request target")
+        }
+        HostInvalid {
+            description("invalid host header")
+        }
+        DuplicateHost {
+            description("duplicate host header")
+        }
+        ConnectionInvalid {
+            description("invalid connection header")
+        }
+        ContentLengthInvalid {
+            description("invalid content-length header")
+        }
+        DuplicateContentLength {
+            description("duplicate content length header")
+        }
+        UnsupportedBody {
+            description("this kind of request body is not supported (CONNECT)")
+        }
+        RequestTooLong {
+            description("request body is too big")
+        }
     }
 }
