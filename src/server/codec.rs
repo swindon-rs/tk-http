@@ -117,3 +117,20 @@ pub trait Codec<S: Io> {
     /// hand we might buffer/pipeline multiple responses at once.
     fn start_response(&mut self, e: Encoder<S>) -> Self::ResponseFuture;
 }
+
+impl<S: Io, F> Codec<S> for Box<Codec<S, ResponseFuture=F>>
+    where F: Future<Item=EncoderDone<S>, Error=Error>,
+{
+    type ResponseFuture = F;
+    fn recv_mode(&mut self) -> RecvMode {
+        self.recv_mode()
+    }
+    fn data_received(&mut self, data: &[u8], end: bool)
+        -> Result<Async<usize>, Error>
+    {
+        self.data_received(data, end)
+    }
+    fn start_response(&mut self, e: Encoder<S>) -> Self::ResponseFuture {
+        self.start_response(e)
+    }
+}
