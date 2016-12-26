@@ -4,7 +4,7 @@ use futures::{Future, Poll};
 use futures::Async::{Ready, NotReady};
 
 
-/// Optional future
+/// Optional future [to be removed]
 ///
 /// This is a future that can hold either a result directly, similarly to
 /// a `futures::done` or a real future. Future is stored in a `Box`ed form, to
@@ -14,6 +14,10 @@ use futures::Async::{Ready, NotReady};
 /// almost never return a future. So the consumer of the future can check
 /// enum and do something immediately on the fast path, and proceed the long
 /// path with a boxed future otherwise.
+///
+/// Note: This was experiment to optimize some scenarios, we're going to remove
+/// it from library and let rust do it for us. Also we may achieve same thing
+/// just by applying specializations when they become stable.
 pub enum OptFuture<I, E> {
     Future(Box<Future<Item=I, Error=E>>),
     Value(Result<I, E>),
