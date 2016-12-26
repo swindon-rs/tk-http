@@ -40,15 +40,19 @@ pub struct Response {
 }
 
 impl Response {
+    /// Get response code
     pub fn code(&self) -> u16 {
         self.code
     }
+    /// Get response reason (you shouldn't rely on this, use `code()`)
     pub fn reason(&self) -> &str {
         &self.reason
     }
+    /// Get response headers
     pub fn headers(&self) -> &[(String, Vec<u8>)] {
         &self.headers
     }
+    /// Get response body
     pub fn body(&self) -> Option<&[u8]> {
         self.body.as_ref().map(|x| &x[..])
     }
@@ -88,6 +92,7 @@ impl<S: Io> Codec<S> for Buffered {
 }
 
 impl Buffered {
+    /// Fetch data from url using GET method, fully buffered
     pub fn get(url: Url) -> (Buffered, Receiver<Result<Response, Error>>) {
         let (tx, rx) = channel();
         (Buffered {
@@ -99,6 +104,7 @@ impl Buffered {
             },
          rx)
     }
+    /// Set max response length for this buffered reader
     pub fn max_response_length(&mut self, value: usize) {
         self.max_response_length = value;
     }

@@ -1,3 +1,5 @@
+//! Higher-level interface for serving fully buffered requests
+//!
 use std::net::SocketAddr;
 use std::marker::PhantomData;
 

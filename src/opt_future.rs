@@ -19,7 +19,9 @@ use futures::Async::{Ready, NotReady};
 /// it from library and let rust do it for us. Also we may achieve same thing
 /// just by applying specializations when they become stable.
 pub enum OptFuture<I, E> {
+    /// A boxed future
     Future(Box<Future<Item=I, Error=E>>),
+    /// An eager value
     Value(Result<I, E>),
     #[doc(hidden)]
     Done,

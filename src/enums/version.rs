@@ -3,20 +3,10 @@ use std::fmt;
 /// Enum reprsenting HTTP version.
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Version {
+    /// Version 1.0 of the HTTP protocol
     Http10,
+    /// Version 1.1 of the HTTP protocol
     Http11,
-}
-
-impl Version {
-
-    pub fn from_httparse(v: u8) -> Version {
-        match v {
-            0 => Version::Http10,
-            1 => Version::Http11,
-            // TODO(tailhook) figure out if httparse validates this number
-            x => panic!("Unknown http version {:?}", x),
-        }
-    }
 }
 
 impl fmt::Display for Version {

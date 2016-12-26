@@ -1,5 +1,6 @@
 //! Simple HTTP service based on `tokio` tools
 #![recursion_limit="100"]
+#![warn(missing_docs)]
 
 extern crate futures;
 extern crate url;

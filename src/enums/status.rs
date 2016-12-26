@@ -3,6 +3,7 @@
 
 /// Enum with some HTTP Status codes.
 #[derive(Debug, PartialEq, Copy, Clone)]
+#[allow(missing_docs)]
 pub enum Status {
     //  1xx status codes
     Continue,                       // 100
