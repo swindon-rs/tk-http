@@ -324,19 +324,16 @@ impl<S: Io> Future for FutureRawBody<S> {
 #[cfg(feature="sendfile")]
 mod sendfile {
     use std::io;
+    use std::os::unix::io::{AsRawFd, RawFd};
     use futures::Async;
     use tk_sendfile::{Destination, FileOpener, Sendfile};
+    use tokio_core::io::Io;
     use tokio_core::net::TcpStream;
     use super::RawBody;
 
-    impl Destination for RawBody<TcpStream> {
-        fn write_file<O: FileOpener>(&mut self, file: &mut Sendfile<O>)
-            -> Result<usize, io::Error>
-        {
-            self.io.write_file(file)
-        }
-        fn poll_write(&mut self) -> Async<()> {
-            self.io.poll_write()
+    impl<T: Io + AsRawFd> AsRawFd for RawBody<T> {
+        fn as_raw_fd(&self) -> RawFd {
+            self.io.as_raw_fd()
         }
     }
 
