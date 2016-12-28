@@ -4,6 +4,7 @@
 
 extern crate futures;
 extern crate url;
+extern crate sha1;
 extern crate httparse;
 extern crate tokio_core;
 extern crate netbuf;

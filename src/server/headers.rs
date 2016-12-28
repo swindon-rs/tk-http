@@ -9,6 +9,7 @@ use tk_bufstream::Buf;
 use super::{Error, RequestTarget, Dispatcher};
 use super::codec::BodyKind;
 use super::encoder::ResponseConfig;
+use super::websocket::{self, WebsocketHandshake};
 use headers;
 use {Version};
 
@@ -93,24 +94,50 @@ impl<'a> Head<'a> {
     pub fn host(&self) -> Option<&str> {
         self.host
     }
-    /// Returns true
+    /// Returns true if `Host` header conflicts with host in request-uri
+    ///
+    /// By spec this fact may be ignored in proxy, but better to reply
+    /// BadRequest in this case
     pub fn has_conflicting_host(&self) -> bool {
         self.conflicting_host
     }
+    /// Version of HTTP request
     pub fn version(&self) -> Version {
         self.version
     }
+    /// Headers of HTTP request
     pub fn headers(&self) -> &'a [Header<'a>] {
         self.headers
     }
+    /// Return `true` if `Connection: close` header exists
     pub fn connection_close(&self) -> bool {
         self.connection_close
     }
-    pub fn connection_header(&self) -> Option<&Cow<'a, str>> {
-        self.connection_header.as_ref()
+    /// Returns the value of the `Connection` header (all of them, if multiple)
+    pub fn connection_header(&'a self) -> Option<&'a str> {
+        self.connection_header.as_ref().map(|x| &x[..])
+    }
+    /// Returns true if there was transfer-encoding or content-length != 0
+    ///
+    /// I.e. `false` may mean either `Content-Length: 0` or there were no
+    /// content length. This is mostly important to check for requests which
+    /// must not have body (`HEAD`, `CONNECT`, `Upgrade: websocket` ...)
+    pub fn has_body(&self) -> bool {
+        self.body_kind == BodyKind::Fixed(0)
+    }
+    /// Check if connection is a websocket and return hanshake info
+    ///
+    /// `Err(())` is returned when there was handshake but where was something
+    /// wrong with it (so you should return `BadRequest` even if you support
+    /// plain http on the resource).
+    ///
+    /// `Ok(None)` is returned when it's a plain HTTP request (no upgrade).
+    pub fn get_websocket_upgrade(&self)
+        -> Result<Option<WebsocketHandshake>, ()>
+    {
+        websocket::get_handshake(self)
     }
 }
-
 
 fn scan_headers<'x>(raw_request: &'x Request)
     -> Result<RequestConfig<'x>, Error>
