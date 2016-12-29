@@ -48,6 +48,11 @@ pub trait Service<S: Io> {
     fn call(&mut self, request: Request, encoder: Encoder<S>) -> Self::Future;
 }
 
+pub trait Websocket<S: Io> {
+    type Future: Future<Item=EncoderDone<S>, Error=Error>;
+    fn start(&mut self, output: WriteFrame, input: ReadFrame) -> Self::Future;
+}
+
 impl Request {
     pub fn peer_addr(&self) -> SocketAddr {
         self.peer_addr
@@ -101,6 +106,11 @@ impl<S: Io, N: NewService<S>> BufferedDispatcher<S, N> {
             phantom: PhantomData,
         }
     }
+    pub fn new_with_websockets(addr, service: N)
+        where N::Instance: Websocket<S>
+    {
+        unimplemented!();
+    }
     pub fn max_request_length(&mut self, value: usize) {
         self.max_request_length = value;
     }
@@ -146,5 +156,10 @@ impl<S: Io, R: Service<S>> Codec<S> for BufferedCodec<R> {
     }
     fn start_response(&mut self, e: Encoder<S>) -> R::Future {
         self.service.call(self.request.take().unwrap(), e)
+    }
+    fn hijack(&mut self, write_buf: WriteBuf<S>, read_buf: ReadBuf<S>) {
+        let inp = read_buf.framed(WebsocketCodec);
+        let out = write_buf.framed(WebsocketCodec);
+        handle.spawn(self.service.start(out, inp));
     }
 }

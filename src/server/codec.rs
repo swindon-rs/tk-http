@@ -116,6 +116,15 @@ pub trait Codec<S: Io> {
     /// immediately (or as fast as you yield to main loop). On the other
     /// hand we might buffer/pipeline multiple responses at once.
     fn start_response(&mut self, e: Encoder<S>) -> Self::ResponseFuture;
+
+    /// Called after future retunrted by `start_response` done if recv mode
+    /// is `Hijack`
+    ///
+    /// Note: both input and output buffers can contain some data.
+    fn hijack(&mut self, input: ReadBuf<S>, output: WriteBuf<S>) {
+        panic!("`Codec::recv_mode` returned `Hijack` but \
+            no hijack() method implemented");
+    }
 }
 
 impl<S: Io, F> Codec<S> for Box<Codec<S, ResponseFuture=F>>
