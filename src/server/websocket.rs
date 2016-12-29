@@ -115,16 +115,17 @@ impl fmt::Display for WebsocketAccept {
                                        0123456789+/";
         let mut buf = [0u8; 28];
         for i in 0..6 {
-            let n = (self.0[i*3] << 16 | self.0[i*3+1] << 8 | self.0[i*3+2])
-                    as usize;
+            let n = ((self.0[i*3+0] as usize) << 16) |
+                    ((self.0[i*3+1] as usize) <<  8) |
+                     (self.0[i*3+2] as usize) ;
             buf[i*4+0] = CHARS[(n >> 18) & 63];
             buf[i*4+1] = CHARS[(n >> 12) & 63];
             buf[i*4+2] = CHARS[(n >>  6) & 63];
             buf[i*4+3] = CHARS[(n >>  0) & 63];
         }
-        let n = self.0[19] << 16;
-        buf[24] = (n >> 18) & 63;
-        buf[25] = (n >> 12) & 63;
+        let n = (self.0[19] as usize) << 16;
+        buf[24] = CHARS[(n >> 18) & 63];
+        buf[25] = CHARS[(n >> 12) & 63];
         buf[26] = b'=';
         buf[27] = b'=';
         fmt::Write::write_str(f, unsafe {
