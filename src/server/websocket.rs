@@ -15,7 +15,7 @@ const GUID: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 /// Or use any other thing that supports `Display`.
 pub struct WebsocketAccept([u8; 20]);
 
-
+#[derive(Debug)]
 pub struct WebsocketHandshake {
     /// The destination value of `Sec-WebSocket-Accept`
     pub accept: WebsocketAccept,
@@ -24,6 +24,7 @@ pub struct WebsocketHandshake {
     /// List of `Sec-WebSocket-Extensions` tokens
     pub extensions: Vec<String>,
 }
+
 
 fn bytes_trim(mut x: &[u8]) -> &[u8] {
     while x.len() > 0 && matches!(x[0], b'\r' | b'\n' | b' ' | b'\t') {
@@ -110,9 +111,9 @@ pub fn get_handshake(req: &Head) -> Result<Option<WebsocketHandshake>, ()> {
 
 impl fmt::Display for WebsocketAccept {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        static CHARS: &'static[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
-                                       abcdefghijklmnopqrstuvwxyz\
-                                       0123456789+/";
+        const CHARS: &'static[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                                      abcdefghijklmnopqrstuvwxyz\
+                                      0123456789+/";
         let mut buf = [0u8; 28];
         for i in 0..6 {
             let n = ((self.0[i*3+0] as usize) << 16) |
@@ -123,13 +124,20 @@ impl fmt::Display for WebsocketAccept {
             buf[i*4+2] = CHARS[(n >>  6) & 63];
             buf[i*4+3] = CHARS[(n >>  0) & 63];
         }
-        let n = (self.0[19] as usize) << 16;
+        let n = ((self.0[18] as usize) << 16) |
+                ((self.0[19] as usize) <<  8);
         buf[24] = CHARS[(n >> 18) & 63];
         buf[25] = CHARS[(n >> 12) & 63];
-        buf[26] = b'=';
+        buf[26] = CHARS[(n >> 6) & 63];
         buf[27] = b'=';
         fmt::Write::write_str(f, unsafe {
             from_utf8_unchecked(&buf)
         })
+    }
+}
+
+impl fmt::Debug for WebsocketAccept {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "WebsocketAccept({})", self)
     }
 }

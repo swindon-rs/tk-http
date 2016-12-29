@@ -8,13 +8,14 @@ authors = ["Alexey Popravka <alexey.popravka@horsedevel.com>"]
 futures = "0.1.7"
 httparse = "1.1.2"
 tokio-core = "0.1.0"
-tk-bufstream = "0.2.2"
+tk-bufstream = "0.2.3"
 netbuf = "0.3.7"
 quick-error = "1.1.0"
 matches = "0.1.4"
 log = "0.3.6"
 url = "1.2.3"
 sha1 = "0.2.0"
+byteorder = "0.5.3"
 
 # for curl-rs and "simple" interface (may be move to another crate?)
 futures-cpupool = "0.1.2"

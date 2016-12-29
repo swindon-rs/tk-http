@@ -43,12 +43,13 @@ fn main() {
     let addr = "0.0.0.0:8080".parse().unwrap();
     let listener = TcpListener::bind(&addr, &lp.handle()).unwrap();
     let cfg = Config::new().done();
+    let h1 = lp.handle();
 
     let done = listener.incoming()
         .map_err(|e| { println!("Accept error: {}", e); })
         .map(|(socket, addr)| {
             Proto::new(socket, &cfg,
-                BufferedDispatcher::new(addr, || service))
+                BufferedDispatcher::new(addr, &h1, || service))
             .map_err(|e| { println!("Connection error: {}", e); })
         })
         .buffer_unordered(200000)

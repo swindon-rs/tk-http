@@ -123,7 +123,7 @@ impl<'a> Head<'a> {
     /// content length. This is mostly important to check for requests which
     /// must not have body (`HEAD`, `CONNECT`, `Upgrade: websocket` ...)
     pub fn has_body(&self) -> bool {
-        self.body_kind == BodyKind::Fixed(0)
+        self.body_kind != BodyKind::Fixed(0)
     }
     /// Check if connection is a websocket and return hanshake info
     ///
@@ -132,6 +132,9 @@ impl<'a> Head<'a> {
     /// plain http on the resource).
     ///
     /// `Ok(None)` is returned when it's a plain HTTP request (no upgrade).
+    ///
+    /// Note: this method computes handshake again, so it's better not to
+    /// call it multiple times.
     pub fn get_websocket_upgrade(&self)
         -> Result<Option<WebsocketHandshake>, ()>
     {

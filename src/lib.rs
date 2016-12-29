@@ -9,6 +9,7 @@ extern crate httparse;
 extern crate tokio_core;
 extern crate netbuf;
 extern crate tk_bufstream;
+extern crate byteorder;
 #[macro_use(quick_error)] extern crate quick_error;
 #[macro_use] extern crate matches;
 #[macro_use] extern crate log;
@@ -20,6 +21,7 @@ extern crate ns_std_threaded;
 
 pub mod server;
 pub mod client;
+pub mod websocket;
 mod enums;
 mod headers;
 mod base_serializer;
