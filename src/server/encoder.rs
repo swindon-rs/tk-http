@@ -326,7 +326,6 @@ mod sendfile {
     use std::io;
     use std::os::unix::io::{AsRawFd, RawFd};
     use futures::Async;
-    use tk_sendfile::{Destination, FileOpener, Sendfile};
     use tokio_core::io::Io;
     use tokio_core::net::TcpStream;
     use super::RawBody;

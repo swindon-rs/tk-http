@@ -16,7 +16,6 @@ extern crate tk_bufstream;
 extern crate abstract_ns;
 extern crate futures_cpupool;
 extern crate ns_std_threaded;
-#[cfg(feature="sendfile")] extern crate tk_sendfile;
 
 
 pub mod server;
