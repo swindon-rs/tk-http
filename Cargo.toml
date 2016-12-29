@@ -16,8 +16,6 @@ log = "0.3.6"
 url = "1.2.3"
 sha1 = "0.2.0"
 
-tk-sendfile = { version="0.3.0", optional=true }
-
 # for curl-rs and "simple" interface (may be move to another crate?)
 futures-cpupool = "0.1.2"
 abstract-ns = "0.2.1"
@@ -27,7 +25,7 @@ ns-std-threaded = "0.1.0"
 
 [features]
 default = ["sendfile"]
-sendfile = ["tk-sendfile"]
+sendfile = []
 
 [dev-dependencies]
 env_logger = "0.3.5"
