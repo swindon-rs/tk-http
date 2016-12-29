@@ -5,7 +5,9 @@ use std::marker::PhantomData;
 
 use futures::{Async, Future};
 use tokio_core::io::Io;
+use tk_bufstream::{ReadBuf, WriteBuf, ReadFramed, WriteFramed};
 
+use websocket::{Codec as WebsocketCodec};
 use super::{Error, Encoder, EncoderDone, Dispatcher, Codec, Head, RecvMode};
 use {Version};
 
@@ -50,7 +52,9 @@ pub trait Service<S: Io> {
 
 pub trait Websocket<S: Io> {
     type Future: Future<Item=EncoderDone<S>, Error=Error>;
-    fn start(&mut self, output: WriteFrame, input: ReadFrame) -> Self::Future;
+    fn start(&mut self, output: WriteFramed<S, WebsocketCodec>,
+                        input: ReadFramed<S, WebsocketCodec>)
+        -> Self::Future;
 }
 
 impl Request {
@@ -106,7 +110,7 @@ impl<S: Io, N: NewService<S>> BufferedDispatcher<S, N> {
             phantom: PhantomData,
         }
     }
-    pub fn new_with_websockets(addr, service: N)
+    pub fn new_with_websockets(addr: SocketAddr, service: N)
         where N::Instance: Websocket<S>
     {
         unimplemented!();
@@ -160,6 +164,7 @@ impl<S: Io, R: Service<S>> Codec<S> for BufferedCodec<R> {
     fn hijack(&mut self, write_buf: WriteBuf<S>, read_buf: ReadBuf<S>) {
         let inp = read_buf.framed(WebsocketCodec);
         let out = write_buf.framed(WebsocketCodec);
-        handle.spawn(self.service.start(out, inp));
+        //handle.spawn(self.service.start(out, inp));
+        unimplemented!();
     }
 }

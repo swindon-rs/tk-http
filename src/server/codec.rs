@@ -1,5 +1,6 @@
 use futures::{Async, Future};
 use tokio_core::io::Io;
+use tk_bufstream::{ReadBuf, WriteBuf};
 
 use super::{Error, Encoder, EncoderDone, Head};
 
@@ -121,7 +122,7 @@ pub trait Codec<S: Io> {
     /// is `Hijack`
     ///
     /// Note: both input and output buffers can contain some data.
-    fn hijack(&mut self, input: ReadBuf<S>, output: WriteBuf<S>) {
+    fn hijack(&mut self, output: WriteBuf<S>,  input: ReadBuf<S>) {
         panic!("`Codec::recv_mode` returned `Hijack` but \
             no hijack() method implemented");
     }

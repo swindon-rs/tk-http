@@ -15,7 +15,6 @@ const GUID: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 /// Or use any other thing that supports `Display`.
 pub struct WebsocketAccept([u8; 20]);
 
-
 pub struct WebsocketHandshake {
     /// The destination value of `Sec-WebSocket-Accept`
     pub accept: WebsocketAccept,
@@ -24,6 +23,9 @@ pub struct WebsocketHandshake {
     /// List of `Sec-WebSocket-Extensions` tokens
     pub extensions: Vec<String>,
 }
+
+pub struct WebsocketCodec;
+
 
 fn bytes_trim(mut x: &[u8]) -> &[u8] {
     while x.len() > 0 && matches!(x[0], b'\r' | b'\n' | b' ' | b'\t') {
@@ -110,9 +112,9 @@ pub fn get_handshake(req: &Head) -> Result<Option<WebsocketHandshake>, ()> {
 
 impl fmt::Display for WebsocketAccept {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        static CHARS: &'static[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
-                                       abcdefghijklmnopqrstuvwxyz\
-                                       0123456789+/";
+        const CHARS: &'static[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                                      abcdefghijklmnopqrstuvwxyz\
+                                      0123456789+/";
         let mut buf = [0u8; 28];
         for i in 0..6 {
             let n = ((self.0[i*3+0] as usize) << 16) |
@@ -132,4 +134,8 @@ impl fmt::Display for WebsocketAccept {
             from_utf8_unchecked(&buf)
         })
     }
+}
+
+impl WebsocketCodec {
+    
 }
