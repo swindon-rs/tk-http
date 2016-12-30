@@ -2,7 +2,6 @@ use std::str::from_utf8;
 
 use tk_bufstream::Buf;
 use futures::Poll;
-use futures::Async::{NotReady, Ready};
 use byteorder::{BigEndian, ByteOrder};
 
 use super::{Error, Packet};
@@ -30,25 +29,25 @@ impl<'a> Into<Packet> for Frame<'a> {
 }
 
 
-fn parse_frame<'x>(buf: &'x mut Buf, limit: usize)
-    -> Poll<(Frame<'x>, usize), Error>
+pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize)
+    -> Result<Option<(Frame<'x>, usize)>, Error>
 {
     use self::Frame::*;
 
     if buf.len() < 2 {
-        return Ok(NotReady);
+        return Ok(None);
     }
     let (size, fsize) = {
         match buf[1] & 0x7F {
             126 => {
                 if buf.len() < 4 {
-                    return Ok(NotReady);
+                    return Ok(None);
                 }
                 (BigEndian::read_u16(&buf[2..4]) as u64, 4)
             }
             127 => {
                 if buf.len() < 10 {
-                    return Ok(NotReady);
+                    return Ok(None);
                 }
                 (BigEndian::read_u64(&buf[2..10]), 10)
             }
@@ -61,7 +60,7 @@ fn parse_frame<'x>(buf: &'x mut Buf, limit: usize)
     let size = size as usize;
     let start = fsize + 4 /* mask size */;
     if buf.len() < start + size {
-        return Ok(NotReady);
+        return Ok(None);
     }
 
     let fin = buf[0] & 0x80 != 0;
@@ -87,5 +86,38 @@ fn parse_frame<'x>(buf: &'x mut Buf, limit: usize)
         // TODO(tailhook) implement shutdown packets
         x => return Err(Error::InvalidOpcode(x)),
     };
-    return Ok(Ready((frame, start + size)));
+    return Ok(Some((frame, start + size)));
+}
+
+pub fn write_packet(buf: &mut Buf, opcode: u8, data: &[u8]) {
+    debug_assert!(opcode & 0xF0 == 0);
+    let first_byte = opcode | 0x80;  // always fin
+    match data.len() {
+        len @ 0...125 => {
+            buf.extend(&[first_byte, len as u8]);
+        }
+        len @ 126...65535 => {
+            buf.extend(&[first_byte, 126,
+                (len >> 8) as u8, (len & 0xFF) as u8]);
+        }
+        len => {
+            buf.extend(&[first_byte, 127,
+                ((len >> 56) & 0xFF) as u8,
+                ((len >> 48) & 0xFF) as u8,
+                ((len >> 40) & 0xFF) as u8,
+                ((len >> 32) & 0xFF) as u8,
+                ((len >> 24) & 0xFF) as u8,
+                ((len >> 16) & 0xFF) as u8,
+                ((len >> 8) & 0xFF) as u8,
+                (len & 0xFF) as u8]);
+        }
+    }
+    buf.extend(data);
+}
+pub fn write_close(buf: &mut Buf, code: u16, reason: &str) {
+    let data = reason.as_bytes();
+    assert!(data.len() <= 123);
+    buf.extend(&[0x88, (data.len() + 2) as u8,
+                  (code >> 8) as u8, (code & 0xFF) as u8]);
+    buf.extend(data);
 }
