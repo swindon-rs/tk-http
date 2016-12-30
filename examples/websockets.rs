@@ -20,21 +20,40 @@ use minihttp::server::buffered::{Request, BufferedDispatcher};
 use minihttp::server::{Encoder, EncoderDone, Config, Proto, Error};
 
 
-const BODY: &'static str = "Hello World!";
+const INDEX: &'static str = include_str!("ws.html");
+const JS: &'static str = include_str!("ws.js");
 
-fn service<S:Io>(_: Request, mut e: Encoder<S>)
+fn service<S:Io>(req: Request, mut e: Encoder<S>)
     -> FutureResult<EncoderDone<S>, Error>
 {
-    e.status(Status::Ok);
-    e.add_length(BODY.as_bytes().len() as u64).unwrap();
-    e.format_header("Date", time::now_utc().rfc822()).unwrap();
-    e.add_header("Server",
-        concat!("minihttp/", env!("CARGO_PKG_VERSION"))
-    ).unwrap();
-    if e.done_headers().unwrap() {
-        e.write_body(BODY.as_bytes());
+    if let Some(ws) = req.websocket_handshake() {
+        e.status(Status::SwitchingProtocol);
+        e.format_header("Date", time::now_utc().rfc822()).unwrap();
+        e.add_header("Server",
+            concat!("minihttp/", env!("CARGO_PKG_VERSION"))
+        ).unwrap();
+        e.add_header("Connection", "upgrade").unwrap();
+        e.add_header("Upgrade", "websocket").unwrap();
+        e.format_header("Sec-Websocket-Accept", &ws.accept).unwrap();
+        e.done_headers().unwrap();
+        ok(e.done())
+    } else {
+        let (data, ctype) = match req.path() {
+            "/ws.js" => (JS, "text/javascript; charset=utf-8"),
+            _ => (INDEX, "text/html; charset=utf-8"),
+        };
+        e.status(Status::Ok);
+        e.add_length(data.as_bytes().len() as u64).unwrap();
+        e.format_header("Date", time::now_utc().rfc822()).unwrap();
+        e.add_header("Content-Type", ctype).unwrap();
+        e.add_header("Server",
+            concat!("minihttp/", env!("CARGO_PKG_VERSION"))
+        ).unwrap();
+        if e.done_headers().unwrap() {
+            e.write_body(data.as_bytes());
+        }
+        ok(e.done())
     }
-    ok(e.done())
 }
 
 
