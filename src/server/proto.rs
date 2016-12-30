@@ -191,7 +191,13 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                                 // TODO(tailhook) start writing now
                                 unimplemented!();
                             }
-                            Hijack => unimplemented!(),
+                            Hijack => {
+                                // Okay, reading end is Hijack'd and writing
+                                // end is Idle (so basically finished request)
+                                // This means it's good time to do the
+                                // actual hijack
+                                unimplemented!();
+                            }
                         }
                     }
                 }

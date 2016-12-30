@@ -5,10 +5,12 @@ use std::marker::PhantomData;
 
 use futures::{Async, Future};
 use tokio_core::io::Io;
+use tokio_core::reactor::Handle;
 use tk_bufstream::{ReadBuf, WriteBuf, ReadFramed, WriteFramed};
 
 use websocket::{Codec as WebsocketCodec};
 use super::{Error, Encoder, EncoderDone, Dispatcher, Codec, Head, RecvMode};
+use super::{WebsocketHandshake};
 use {Version};
 
 /// Buffered request struct
@@ -24,12 +26,14 @@ pub struct Request {
     version: Version,
     headers: Vec<(String, Vec<u8>)>,
     body: Vec<u8>,
+    websocket_handshake: Option<WebsocketHandshake>,
 }
 
 pub struct BufferedDispatcher<S: Io, N: NewService<S>> {
     addr: SocketAddr,
     max_request_length: usize,
     service: N,
+    handle: Handle,
     phantom: PhantomData<S>,
 }
 
@@ -37,6 +41,7 @@ pub struct BufferedCodec<R> {
     max_request_length: usize,
     service: R,
     request: Option<Request>,
+    handle: Handle,
 }
 
 pub trait NewService<S: Io> {
@@ -58,23 +63,33 @@ pub trait Websocket<S: Io> {
 }
 
 impl Request {
+    /// Returns peer address that initiated HTTP connection
     pub fn peer_addr(&self) -> SocketAddr {
         self.peer_addr
     }
+    /// Returns method of a request
     pub fn method(&self) -> &str {
         &self.method
     }
+    /// Returns path of a request
     pub fn path(&self) -> &str {
         &self.path
     }
+    /// Returns HTTP version used in request
     pub fn version(&self) -> Version {
         self.version
     }
+    /// Returns request headers
     pub fn headers(&self) -> &[(String, Vec<u8>)] {
         &self.headers
     }
+    /// Returns request body
     pub fn body(&self) -> &[u8] {
         &self.body
+    }
+    /// Returns websocket handshake if exists
+    pub fn websocket_handshake(&self) -> Option<&WebsocketHandshake> {
+        self.websocket_handshake.as_ref()
     }
 }
 
@@ -102,11 +117,14 @@ impl<S: Io, T, F> Service<S> for T
 
 
 impl<S: Io, N: NewService<S>> BufferedDispatcher<S, N> {
-    pub fn new(addr: SocketAddr, service: N) -> BufferedDispatcher<S, N> {
+    pub fn new(addr: SocketAddr, handle: &Handle, service: N)
+        -> BufferedDispatcher<S, N>
+    {
         BufferedDispatcher {
             addr: addr,
             max_request_length: 10_485_760,
             service: service,
+            handle: handle.clone(),
             phantom: PhantomData,
         }
     }
@@ -127,6 +145,7 @@ impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N> {
         -> Result<Self::Codec, Error>
     {
         // TODO(tailhook) strip hop-by-hop headers
+        let up = headers.get_websocket_upgrade();
         Ok(BufferedCodec {
             max_request_length: self.max_request_length,
             service: self.service.new(),
@@ -141,7 +160,9 @@ impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N> {
                     (header.name.to_string(), header.value.to_vec())
                 }).collect(),
                 body: Vec::new(),
+                websocket_handshake: up.unwrap_or(None),
             }),
+            handle: self.handle.clone(),
         })
     }
 }
@@ -149,7 +170,11 @@ impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N> {
 impl<S: Io, R: Service<S>> Codec<S> for BufferedCodec<R> {
     type ResponseFuture = R::Future;
     fn recv_mode(&mut self) -> RecvMode {
-        RecvMode::BufferedUpfront(self.max_request_length)
+        if self.request.as_ref().unwrap().websocket_handshake.is_some() {
+            RecvMode::Hijack
+        } else {
+            RecvMode::BufferedUpfront(self.max_request_length)
+        }
     }
     fn data_received(&mut self, data: &[u8], end: bool)
         -> Result<Async<usize>, Error>

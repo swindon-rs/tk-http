@@ -64,6 +64,7 @@ fn main() {
     env_logger::init().expect("init logging");
 
     let mut lp = Core::new().unwrap();
+    let h1 = lp.handle();
 
     let addr = "0.0.0.0:8080".parse().unwrap();
     let listener = TcpListener::bind(&addr, &lp.handle()).unwrap();
@@ -71,9 +72,11 @@ fn main() {
 
     let done = listener.incoming()
         .map_err(|e| { println!("Accept error: {}", e); })
-        .map(|(socket, addr)| {
-            Proto::new(socket, &cfg, BufferedDispatcher::new(addr, || service))
+        .map(move |(socket, addr)| {
+            Proto::new(socket, &cfg,
+                BufferedDispatcher::new(addr, &h1, || service))
             .map_err(|e| { println!("Connection error: {}", e); })
+            .then(|_| Ok(())) // don't fail, please
         })
         .buffer_unordered(200000)
           .for_each(|()| Ok(()));
