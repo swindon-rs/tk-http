@@ -1,6 +1,7 @@
 //! Higher-level interface for serving fully buffered requests
 //!
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::marker::PhantomData;
 
 use futures::{Async, Future, IntoFuture};
@@ -45,14 +46,14 @@ pub struct BufferedCodec<R> {
     handle: Handle,
 }
 
-pub struct WebsocketFactory<F, G> {
-    service: F,
-    websockets: G,
+pub struct WebsocketFactory<H, I> {
+    service: Arc<H>,
+    websockets: Arc<I>,
 }
 
-pub struct WebsocketService<F, G, T, U> {
-    service: F,
-    websockets: G,
+pub struct WebsocketService<H, I, T, U> {
+    service: Arc<H>,
+    websockets: Arc<I>,
     phantom: PhantomData<(T, U)>,
 }
 
@@ -71,12 +72,10 @@ pub trait Service<S: Io> {
         -> Self::WebsocketFuture;
 }
 
-impl<F, G, H, I, T, U, S: Io> NewService<S> for WebsocketFactory<F, G>
-    where F: Fn() -> H,
-          H: FnMut(Request, Encoder<S>) -> T,
-          G: Fn() -> I,
-          I: FnMut(WriteFramed<S, WebsocketCodec>,
-                   ReadFramed<S, WebsocketCodec>) -> U,
+impl<H, I, T, U, S: Io> NewService<S> for WebsocketFactory<H, I>
+    where H: Fn(Request, Encoder<S>) -> T,
+          I: Fn(WriteFramed<S, WebsocketCodec>,
+                ReadFramed<S, WebsocketCodec>) -> U,
           T: Future<Item=EncoderDone<S>, Error=Error>,
           U: Future<Item=(), Error=()> + 'static,
 {
@@ -84,17 +83,17 @@ impl<F, G, H, I, T, U, S: Io> NewService<S> for WebsocketFactory<F, G>
     type Instance = WebsocketService<H, I, T, U>;
     fn new(&self) -> Self::Instance {
         WebsocketService {
-            service: (self.service)(),
-            websockets: (self.websockets)(),
+            service: self.service.clone(),
+            websockets: self.websockets.clone(),
             phantom: PhantomData,
         }
     }
 }
 
 impl<S: Io, H, I, T, U> Service<S> for WebsocketService<H, I, T, U>
-    where H: FnMut(Request, Encoder<S>) -> T,
-          I: FnMut(WriteFramed<S, WebsocketCodec>,
-                   ReadFramed<S, WebsocketCodec>) -> U,
+    where H: Fn(Request, Encoder<S>) -> T,
+          I: Fn(WriteFramed<S, WebsocketCodec>,
+                ReadFramed<S, WebsocketCodec>) -> U,
           T: Future<Item=EncoderDone<S>, Error=Error>,
           U: Future<Item=(), Error=()> + 'static,
 {
@@ -190,25 +189,23 @@ impl<S: Io, N: NewService<S>> BufferedDispatcher<S, N> {
     }
 }
 
-impl<S: Io, F, G, H, I, T, U> BufferedDispatcher<S, WebsocketFactory<F, G>>
-    where F: Fn() -> H,
-          H: FnMut(Request, Encoder<S>) -> T,
-          G: Fn() -> I,
-          I: FnMut(WriteFramed<S, WebsocketCodec>,
-                   ReadFramed<S, WebsocketCodec>) -> U,
+impl<S: Io, H, I, T, U> BufferedDispatcher<S, WebsocketFactory<H, I>>
+    where H: Fn(Request, Encoder<S>) -> T,
+          I: Fn(WriteFramed<S, WebsocketCodec>,
+                ReadFramed<S, WebsocketCodec>) -> U,
           T: Future<Item=EncoderDone<S>, Error=Error>,
           U: Future<Item=(), Error=()> + 'static,
 {
     pub fn new_with_websockets(addr: SocketAddr, handle: &Handle,
-        http: F, websockets: G)
-        -> BufferedDispatcher<S, WebsocketFactory<F, G>>
+        http: H, websockets: I)
+        -> BufferedDispatcher<S, WebsocketFactory<H, I>>
     {
         BufferedDispatcher {
             addr: addr,
             max_request_length: 10_485_760,
             service: WebsocketFactory {
-                service: http,
-                websockets: websockets,
+                service: Arc::new(http),
+                websockets: Arc::new(websockets),
             },
             handle: handle.clone(),
             phantom: PhantomData,

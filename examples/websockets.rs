@@ -75,8 +75,8 @@ fn main() {
         .map(move |(socket, addr)| {
             Proto::new(socket, &cfg,
                 BufferedDispatcher::new_with_websockets(addr, &h1,
-                    || service,
-                    || |out, inp| {
+                    service,
+                    |out, inp| {
                         inp.forward(out)
                         .map(|_| ())
                         .map_err(|e| error!("Websock err: {}", e))
