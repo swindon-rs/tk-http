@@ -143,4 +143,7 @@ impl<S: Io, F> Codec<S> for Box<Codec<S, ResponseFuture=F>>
     fn start_response(&mut self, e: Encoder<S>) -> Self::ResponseFuture {
         (**self).start_response(e)
     }
+    fn hijack(&mut self, output: WriteBuf<S>,  input: ReadBuf<S>) {
+        (**self).hijack(output, input)
+    }
 }
