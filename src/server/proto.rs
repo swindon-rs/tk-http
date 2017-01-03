@@ -14,9 +14,10 @@ use chunked;
 use body_parser::BodyProgress;
 
 
-enum OutState<S: Io, F> {
+enum OutState<S: Io, F, C> {
     Idle(WriteBuf<S>),
     Write(F),
+    Switch(F, C),
     Void,
 }
 
@@ -37,10 +38,10 @@ enum InState<C> {
 /// A low-level HTTP/1.x server protocol handler
 pub struct Proto<S: Io, D: Dispatcher<S>> {
     dispatcher: D,
-    inbuf: ReadBuf<S>,
+    inbuf: Option<ReadBuf<S>>, // it's optional only for hijacking
     reading: InState<D::Codec>,
     waiting: VecDeque<(ResponseConfig, D::Codec)>,
-    writing: OutState<S, <D::Codec as Codec<S>>::ResponseFuture>,
+    writing: OutState<S, <D::Codec as Codec<S>>::ResponseFuture, D::Codec>,
     config: Arc<Config>,
 }
 
@@ -69,7 +70,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
         let (cout, cin) = IoBuf::new(conn).split();
         return Proto {
             dispatcher: dispatcher,
-            inbuf: cin,
+            inbuf: Some(cin),
             reading: InState::Headers,
             waiting: VecDeque::with_capacity(cfg.inflight_request_prealloc),
             writing: OutState::Idle(cout),
@@ -93,10 +94,11 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                 break;
             }
             // TODO(tailhook) Do reads after parse_headers() [optimization]
-            self.inbuf.read()?;
+            let ref mut inbuf = self.inbuf.as_mut().expect("buffer exists");
+            inbuf.read()?;
             let (next, cont) = match mem::replace(&mut self.reading, Closed) {
                 Headers => {
-                    match parse_headers(&mut self.inbuf.in_buf,
+                    match parse_headers(&mut inbuf.in_buf,
                                         &mut self.dispatcher)?
                     {
                         Some((body, mut codec, cfg)) => {
@@ -118,22 +120,22 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                     }
                 }
                 Body(mut body) => {
-                    body.progress.parse(&mut self.inbuf)?;
-                    let (bytes, done) = body.progress.check_buf(&self.inbuf);
+                    body.progress.parse(inbuf)?;
+                    let (bytes, done) = body.progress.check_buf(inbuf);
                     let operation = if done {
                         Some(body.codec.data_received(
-                            &self.inbuf.in_buf[..bytes], true)?)
-                    } else if self.inbuf.done() {
+                            &inbuf.in_buf[..bytes], true)?)
+                    } else if inbuf.done() {
                         return Err(Error::ConnectionReset);
                     } else if matches!(body.mode, RecvMode::Progressive(x) if x <= bytes) {
                         Some(body.codec.data_received(
-                            &self.inbuf.in_buf[..bytes], false)?)
+                            &inbuf.in_buf[..bytes], false)?)
                     } else {
                         None
                     };
                     match operation {
                         Some(Async::Ready(consumed)) => {
-                            body.progress.consume(&mut self.inbuf, consumed);
+                            body.progress.consume(inbuf, consumed);
                             if done && consumed == bytes {
                                 changed = true;
                                 self.waiting.push_back(
@@ -163,7 +165,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
         }
         Ok(changed)
     }
-    fn do_writes(&mut self) -> Result<(), Error> {
+    fn do_writes(&mut self) -> Result<bool, Error> {
         use self::OutState::*;
         use self::InState::*;
         use server::RecvMode::{BufferedUpfront, Progressive};
@@ -173,7 +175,11 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                     io.flush()?;
                     if let Some((rc, mut codec)) = self.waiting.pop_front() {
                         let e = encoder::new(io, rc);
-                        (Write(codec.start_response(e)), true)
+                        if matches!(self.reading, Hijack) {
+                            (Switch(codec.start_response(e), codec), true)
+                        } else {
+                            (Write(codec.start_response(e)), true)
+                        }
                     } else {
                         match self.reading {
                             Body(BodyState { mode: BufferedUpfront(..), ..})
@@ -211,11 +217,25 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                         }
                     }
                 }
+                Switch(mut f, mut codec) => {
+                    match f.poll()? {
+                        Async::Ready(x) => {
+                            let wr = get_inner(x);
+                            let rd = self.inbuf.take()
+                                .expect("can hijack only once");
+                            codec.hijack(wr, rd);
+                            return Ok(true);
+                        }
+                        Async::NotReady => {
+                            (Write(f), true)
+                        }
+                    }
+                }
                 Void => unreachable!(),
             };
             self.writing = next;
             if !cont {
-                return Ok(());
+                return Ok(false);
             }
         }
     }
@@ -226,9 +246,13 @@ impl<S: Io, D: Dispatcher<S>> Future for Proto<S, D> {
     type Error = Error;
 
     fn poll(&mut self) -> Poll<(), Error> {
-        self.do_writes()?;
+        if self.do_writes()? {
+            return Ok(Async::Ready(()));
+        }
         while self.do_reads()? {
-            self.do_writes()?;
+            if self.do_writes()? {
+                return Ok(Async::Ready(()));
+            }
         }
         // TODO(tailhook) close connection on `Connection: close`
         Ok(Async::NotReady)

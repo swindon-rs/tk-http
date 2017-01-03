@@ -3,7 +3,8 @@
 use std::net::SocketAddr;
 use std::marker::PhantomData;
 
-use futures::{Async, Future};
+use futures::{Async, Future, IntoFuture};
+use futures::future::FutureResult;
 use tokio_core::io::Io;
 use tokio_core::reactor::Handle;
 use tk_bufstream::{ReadBuf, WriteBuf, ReadFramed, WriteFramed};
@@ -44,6 +45,17 @@ pub struct BufferedCodec<R> {
     handle: Handle,
 }
 
+pub struct WebsocketFactory<F, G> {
+    service: F,
+    websockets: G,
+}
+
+pub struct WebsocketService<F, G, T, U> {
+    service: F,
+    websockets: G,
+    phantom: PhantomData<(T, U)>,
+}
+
 pub trait NewService<S: Io> {
     type Future: Future<Item=EncoderDone<S>, Error=Error>;
     type Instance: Service<S, Future=Self::Future>;
@@ -52,14 +64,51 @@ pub trait NewService<S: Io> {
 
 pub trait Service<S: Io> {
     type Future: Future<Item=EncoderDone<S>, Error=Error>;
+    type WebsocketFuture: Future<Item=(), Error=()> + 'static;
     fn call(&mut self, request: Request, encoder: Encoder<S>) -> Self::Future;
+    fn start_websocket(&mut self, output: WriteFramed<S, WebsocketCodec>,
+                                  input: ReadFramed<S, WebsocketCodec>)
+        -> Self::WebsocketFuture;
 }
 
-pub trait Websocket<S: Io> {
-    type Future: Future<Item=EncoderDone<S>, Error=Error>;
-    fn start(&mut self, output: WriteFramed<S, WebsocketCodec>,
-                        input: ReadFramed<S, WebsocketCodec>)
-        -> Self::Future;
+impl<F, G, H, I, T, U, S: Io> NewService<S> for WebsocketFactory<F, G>
+    where F: Fn() -> H,
+          H: FnMut(Request, Encoder<S>) -> T,
+          G: Fn() -> I,
+          I: FnMut(WriteFramed<S, WebsocketCodec>,
+                   ReadFramed<S, WebsocketCodec>) -> U,
+          T: Future<Item=EncoderDone<S>, Error=Error>,
+          U: Future<Item=(), Error=()> + 'static,
+{
+    type Future = T;
+    type Instance = WebsocketService<H, I, T, U>;
+    fn new(&self) -> Self::Instance {
+        WebsocketService {
+            service: (self.service)(),
+            websockets: (self.websockets)(),
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<S: Io, H, I, T, U> Service<S> for WebsocketService<H, I, T, U>
+    where H: FnMut(Request, Encoder<S>) -> T,
+          I: FnMut(WriteFramed<S, WebsocketCodec>,
+                   ReadFramed<S, WebsocketCodec>) -> U,
+          T: Future<Item=EncoderDone<S>, Error=Error>,
+          U: Future<Item=(), Error=()> + 'static,
+{
+    type Future = T;
+    type WebsocketFuture = U;
+    fn call(&mut self, request: Request, encoder: Encoder<S>) -> T {
+        (self.service)(request, encoder)
+    }
+    fn start_websocket(&mut self, output: WriteFramed<S, WebsocketCodec>,
+                                  input: ReadFramed<S, WebsocketCodec>)
+        -> U
+    {
+        (self.websockets)(output, input)
+    }
 }
 
 impl Request {
@@ -109,9 +158,17 @@ impl<S: Io, T, F> Service<S> for T
         F: Future<Item=EncoderDone<S>, Error=Error>,
 {
     type Future = F;
+    type WebsocketFuture = FutureResult<(), ()>;
     fn call(&mut self, request: Request, encoder: Encoder<S>) -> F
     {
         (self)(request, encoder)
+    }
+    fn start_websocket(&mut self, _output: WriteFramed<S, WebsocketCodec>,
+                                  _input: ReadFramed<S, WebsocketCodec>)
+        -> Self::WebsocketFuture
+    {
+        /// Basically no websockets
+        Ok(()).into_future()
     }
 }
 
@@ -128,17 +185,40 @@ impl<S: Io, N: NewService<S>> BufferedDispatcher<S, N> {
             phantom: PhantomData,
         }
     }
-    pub fn new_with_websockets(addr: SocketAddr, service: N)
-        where N::Instance: Websocket<S>
-    {
-        unimplemented!();
-    }
     pub fn max_request_length(&mut self, value: usize) {
         self.max_request_length = value;
     }
 }
 
-impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N> {
+impl<S: Io, F, G, H, I, T, U> BufferedDispatcher<S, WebsocketFactory<F, G>>
+    where F: Fn() -> H,
+          H: FnMut(Request, Encoder<S>) -> T,
+          G: Fn() -> I,
+          I: FnMut(WriteFramed<S, WebsocketCodec>,
+                   ReadFramed<S, WebsocketCodec>) -> U,
+          T: Future<Item=EncoderDone<S>, Error=Error>,
+          U: Future<Item=(), Error=()> + 'static,
+{
+    pub fn new_with_websockets(addr: SocketAddr, handle: &Handle,
+        http: F, websockets: G)
+        -> BufferedDispatcher<S, WebsocketFactory<F, G>>
+    {
+        BufferedDispatcher {
+            addr: addr,
+            max_request_length: 10_485_760,
+            service: WebsocketFactory {
+                service: http,
+                websockets: websockets,
+            },
+            handle: handle.clone(),
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N>
+    where N::Instance: 'static
+{
     type Codec = BufferedCodec<N::Instance>;
 
     fn headers_received(&mut self, headers: &Head)
@@ -167,7 +247,7 @@ impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N> {
     }
 }
 
-impl<S: Io, R: Service<S>> Codec<S> for BufferedCodec<R> {
+impl<S: Io, R: Service<S> + 'static> Codec<S> for BufferedCodec<R> {
     type ResponseFuture = R::Future;
     fn recv_mode(&mut self) -> RecvMode {
         if self.request.as_ref().unwrap().websocket_handshake.is_some() {
@@ -186,10 +266,9 @@ impl<S: Io, R: Service<S>> Codec<S> for BufferedCodec<R> {
     fn start_response(&mut self, e: Encoder<S>) -> R::Future {
         self.service.call(self.request.take().unwrap(), e)
     }
-    fn hijack(&mut self, write_buf: WriteBuf<S>, read_buf: ReadBuf<S>) {
+    fn hijack(&mut self, write_buf: WriteBuf<S>, read_buf: ReadBuf<S>){
         let inp = read_buf.framed(WebsocketCodec);
         let out = write_buf.framed(WebsocketCodec);
-        //handle.spawn(self.service.start(out, inp));
-        unimplemented!();
+        self.handle.spawn(self.service.start_websocket(out, inp));
     }
 }

@@ -74,7 +74,13 @@ fn main() {
         .map_err(|e| { println!("Accept error: {}", e); })
         .map(move |(socket, addr)| {
             Proto::new(socket, &cfg,
-                BufferedDispatcher::new(addr, &h1, || service))
+                BufferedDispatcher::new_with_websockets(addr, &h1,
+                    || service,
+                    || |out, inp| {
+                        inp.forward(out)
+                        .map(|_| ())
+                        .map_err(|e| error!("Websock err: {}", e))
+                    }))
             .map_err(|e| { println!("Connection error: {}", e); })
             .then(|_| Ok(())) // don't fail, please
         })
