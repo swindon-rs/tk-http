@@ -49,12 +49,13 @@ fn main() {
     let listener = TcpListener::bind(&addr, &lp.handle()).unwrap();
     let disk_pool = DiskPool::new(CpuPool::new(40));
     let cfg = Config::new().done();
+    let h1 = lp.handle();
 
     let done = listener.incoming()
         .map_err(|e| { println!("Accept error: {}", e); })
         .map(|(socket, addr)| {
             Proto::new(socket, &cfg,
-                BufferedDispatcher::new(addr, || |_req, mut e: Encoder<_>| {
+                BufferedDispatcher::new(addr, &h1, || |_, mut e: Encoder<_>| {
 
                     disk_pool.open(filename.clone())
                     .and_then(move |file| {
@@ -70,7 +71,6 @@ fn main() {
                         }
                     })
                     .map_err(|_| -> Error { unimplemented!(); })
-
                 }))
             .map_err(|e| { println!("Connection error: {}", e); })
         })

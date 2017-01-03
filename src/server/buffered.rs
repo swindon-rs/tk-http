@@ -213,9 +213,7 @@ impl<S: Io, H, I, T, U> BufferedDispatcher<S, WebsocketFactory<H, I>>
     }
 }
 
-impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N>
-    where N::Instance: 'static
-{
+impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N> {
     type Codec = BufferedCodec<N::Instance>;
 
     fn headers_received(&mut self, headers: &Head)
@@ -244,7 +242,7 @@ impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N>
     }
 }
 
-impl<S: Io, R: Service<S> + 'static> Codec<S> for BufferedCodec<R> {
+impl<S: Io, R: Service<S>> Codec<S> for BufferedCodec<R> {
     type ResponseFuture = R::Future;
     fn recv_mode(&mut self) -> RecvMode {
         if self.request.as_ref().unwrap().websocket_handshake.is_some() {
