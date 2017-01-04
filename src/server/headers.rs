@@ -1,4 +1,5 @@
 use std::str::from_utf8;
+use std::slice::Iter as SliceIter;
 use std::ascii::AsciiExt;
 use std::borrow::Cow;
 
@@ -38,11 +39,6 @@ struct RequestConfig<'a> {
 ///
 /// It's passed to `Codec::headers_received` and you are free to store or
 /// discard any needed fields and headers from it.
-///
-/// Note, we don't strip hop-by-hop headers (`Connection: close`,
-/// `Transfer-Encoding`) and we use them to ensure correctness of the protocol.
-/// You must skip them if proxying headers somewhere.
-// TODO(tailhook) hide the structure?
 #[derive(Debug)]
 pub struct Head<'a> {
     method: &'a str,
@@ -55,6 +51,17 @@ pub struct Head<'a> {
     body_kind: BodyKind,
     connection_close: bool,
     connection_header: Option<Cow<'a, str>>,
+}
+
+/// Iterator over all meaningfull headers for the request
+///
+/// This iterator is created by `Head::headers`. And iterates over all
+/// headers except hop-by-hop ones and `Host`.
+///
+/// Note: duplicate headers are not glued together neither they are sorted
+pub struct HeaderIter<'a> {
+    head: &'a Head<'a>,
+    iter: SliceIter<'a, Header<'a>>,
 }
 
 impl<'a> Head<'a> {
@@ -105,8 +112,40 @@ impl<'a> Head<'a> {
     pub fn version(&self) -> Version {
         self.version
     }
-    /// Headers of HTTP request
-    pub fn headers(&self) -> &'a [Header<'a>] {
+    /// Iterator over the headers of HTTP request
+    ///
+    /// This iterator strips the following kinds of headers:
+    ///
+    /// 1. Hop-by-hop headers (`Connection` itself, and ones it enumerates)
+    /// 2. `Content-Length` and `Transfer-Encoding`
+    /// 3. `Host` header
+    /// 4. `Upgrade` header regardless of whether it's in `Connection`
+    ///
+    /// You may use `all_headers()` if you really need to access to all of
+    /// them (mostly useful for debugging puproses). But you may want to
+    /// consider:
+    ///
+    /// 1. Host of the target request can be received using `host()` method,
+    ///    which is also parsed from `target` path of request if that is
+    ///    in absolute form (so conforming to the spec)
+    /// 2. Payload size can be fetched using `body_length()` method. Note:
+    ///    this also includes cases where length is implicitly set to zero.
+    /// 3. `Connection` header might be discovered with `connection_close()`
+    ///    or `connection_header()`
+    /// 3. `Upgrade` might be discovered with `get_websocket_upgrade()` or
+    ///    only looked in `all_headers()` if `upgrade` presents in
+    ///    `connection_header()`
+    pub fn headers(&self) -> HeaderIter {
+        HeaderIter {
+            head: self,
+            iter: self.headers.iter(),
+        }
+    }
+    /// All headers of HTTP request
+    ///
+    /// Unlike `self.headers()` this does include hop-by-hop headers. This
+    /// method is here just for completeness, you shouldn't need it.
+    pub fn all_headers(&self) -> &'a [Header<'a>] {
         self.headers
     }
     /// Return `true` if `Connection: close` header exists
@@ -117,6 +156,7 @@ impl<'a> Head<'a> {
     pub fn connection_header(&'a self) -> Option<&'a str> {
         self.connection_header.as_ref().map(|x| &x[..])
     }
+
     /// Returns true if there was transfer-encoding or content-length != 0
     ///
     /// I.e. `false` may mean either `Content-Length: 0` or there were no
@@ -124,6 +164,18 @@ impl<'a> Head<'a> {
     /// must not have body (`HEAD`, `CONNECT`, `Upgrade: websocket` ...)
     pub fn has_body(&self) -> bool {
         self.body_kind != BodyKind::Fixed(0)
+    }
+
+    /// Returns size of the request body if either `Content-Length` is set
+    /// or it is safe to assume that request body is zero-length
+    ///
+    /// If request length can't be determined in advance (such as when there
+    /// is a `Transfer-Encoding`) `None` is returned
+    pub fn body_length(&self) -> Option<u64> {
+        match self.body_kind {
+            BodyKind::Fixed(x) => Some(x),
+            _ => None,
+        }
     }
     /// Check if connection is a websocket and return hanshake info
     ///
@@ -294,4 +346,29 @@ pub fn parse_headers<S, D>(buffer: &mut Buf, disp: &mut D)
     };
     buffer.consume(bytes);
     Ok(Some((body_kind, codec, cfg)))
+}
+
+impl<'a> Iterator for HeaderIter<'a> {
+    type Item = (&'a str, &'a [u8]);
+    fn next(&mut self) -> Option<(&'a str, &'a [u8])> {
+        while let Some(header) = self.iter.next() {
+            if header.name.eq_ignore_ascii_case("Connection") ||
+                header.name.eq_ignore_ascii_case("Transfer-Encoding") ||
+                header.name.eq_ignore_ascii_case("Content-Length") ||
+                header.name.eq_ignore_ascii_case("Upgrade") ||
+                header.name.eq_ignore_ascii_case("Host")
+            {
+                continue;
+            }
+
+            if let Some(ref conn) = self.head.connection_header {
+                let mut conn_headers = conn.split(',').map(|x| x.trim());
+                if conn_headers.any(|x| x.eq_ignore_ascii_case(header.name)) {
+                    continue;
+                }
+            }
+            return Some((header.name, header.value));
+        }
+        return None;
+    }
 }

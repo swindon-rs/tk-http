@@ -49,7 +49,7 @@ pub fn get_handshake(req: &Head) -> Result<Option<WebsocketHandshake>, ()> {
     let mut accept = None;
     let mut protocols = Vec::new();
     let mut extensions = Vec::new();
-    for h in req.headers() {
+    for h in req.all_headers() {
         if h.name.eq_ignore_ascii_case("Sec-WebSocket-Key") {
             if accept.is_some() {
                 debug!("Duplicate Sec-WebSocket-Key");

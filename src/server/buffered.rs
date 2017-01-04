@@ -231,8 +231,8 @@ impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N> {
                 path: headers.path().unwrap().to_string(),
                 host: headers.host().map(|x| x.to_string()),
                 version: headers.version(),
-                headers: headers.headers().iter().map(|&header| {
-                    (header.name.to_string(), header.value.to_vec())
+                headers: headers.headers().map(|(name, value)| {
+                    (name.to_string(), value.to_vec())
                 }).collect(),
                 body: Vec::new(),
                 websocket_handshake: up.unwrap_or(None),
