@@ -14,7 +14,7 @@ pub use self::error::Error;
 pub use self::encoder::{Encoder, EncoderDone, FutureRawBody, RawBody};
 pub use self::codec::{Codec, Dispatcher, RecvMode};
 pub use self::proto::Proto;
-pub use self::headers::Head;
+pub use self::headers::{Head, HeaderIter};
 pub use self::request_target::RequestTarget;
 pub use self::websocket::{WebsocketAccept, WebsocketHandshake};
 
