@@ -88,8 +88,8 @@ quick_error! {
             description("error sending a request to a connection pool")
         }
         /// Request body is too big (happens only in buffered mode)
-        RequestBodyTooLong {
-            description("request body too long")
+        ResponseBodyTooLong {
+            description("response body too long")
         }
     }
 }

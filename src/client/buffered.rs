@@ -11,6 +11,7 @@
 //!
 use url::Url;
 use futures::Async;
+use futures::future::{FutureResult, ok};
 use futures::sync::oneshot::{channel, Sender, Receiver};
 use tokio_core::io::Io;
 
@@ -59,15 +60,14 @@ impl Response {
 }
 
 impl<S: Io> Codec<S> for Buffered {
-    fn start_write(&mut self, mut e: Encoder<S>)
-        -> OptFuture<EncoderDone<S>, Error>
-    {
+    type Future = FutureResult<EncoderDone<S>, Error>;
+    fn start_write(&mut self, mut e: Encoder<S>) -> Self::Future {
         e.request_line(self.method, self.url.path(), Version::Http11);
         self.url.host_str().map(|x| {
             e.add_header("Host", x).unwrap();
         });
         e.done_headers().unwrap();
-        OptFuture::Value(Ok(e.done()))
+        ok(e.done())
     }
     fn headers_received(&mut self, headers: &Head) -> Result<RecvMode, Error> {
         self.response = Some(Response {

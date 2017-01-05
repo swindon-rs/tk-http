@@ -115,8 +115,8 @@ fn new_body(mode: BodyKind, recv_mode: RecvMode)
     use body_parser::BodyProgress as P;
     match (mode, recv_mode) {
         // TODO(tailhook) check size < usize
-        (B::Fixed(x), M::Buffered(b)) if x < b as u64 => {
-            Err(RequestBodyTooLong)
+        (B::Fixed(x), M::Buffered(b)) if x > b as u64 => {
+            Err(ResponseBodyTooLong)
         }
         (B::Fixed(x), _)  => Ok(P::Fixed(x as usize)),
         (B::Chunked, _) => Ok(P::Chunked(chunked::State::new())),

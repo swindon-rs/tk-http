@@ -1,5 +1,6 @@
 use futures::sink::Sink;
-use futures::{Async, AsyncSink, Future};
+use futures::future::FutureResult;
+use futures::{Async, AsyncSink, Future, IntoFuture};
 use tokio_core::io::Io;
 use httparse::Header;
 
@@ -81,6 +82,7 @@ pub struct Head<'a> {
 /// `client::buffered::Buffered` codec implementation instead of implemeting
 /// this trait manually.
 pub trait Codec<S: Io> {
+    type Future: Future<Item=EncoderDone<S>, Error=Error>;
 
     /// Start writing a request
     ///
@@ -91,7 +93,7 @@ pub trait Codec<S: Io> {
     /// immediately (or as fast as you yield to main loop). On the other
     /// hand we might buffer/pipeline multiple requests at once.
     fn start_write(&mut self, e: Encoder<S>)
-        -> OptFuture<EncoderDone<S>, Error>;
+        -> Self::Future;
 
     /// Received headers of a response
     ///
@@ -127,10 +129,11 @@ pub trait Codec<S: Io> {
         -> Result<Async<usize>, Error>;
 }
 
-impl<S: Io> Codec<S> for Box<Codec<S>> {
-    fn start_write(&mut self, e: Encoder<S>)
-        -> OptFuture<EncoderDone<S>, Error>
-    {
+impl<S: Io, F> Codec<S> for Box<Codec<S, Future=F>>
+    where F: Future<Item=EncoderDone<S>, Error=Error>
+{
+    type Future = F;
+    fn start_write(&mut self, e: Encoder<S>) -> F {
         (**self).start_write(e)
     }
     fn headers_received(&mut self, headers: &Head) -> Result<RecvMode, Error> {
@@ -143,10 +146,11 @@ impl<S: Io> Codec<S> for Box<Codec<S>> {
     }
 }
 
-impl<S: Io> Codec<S> for Box<Codec<S>+Send> {
-    fn start_write(&mut self, e: Encoder<S>)
-        -> OptFuture<EncoderDone<S>, Error>
-    {
+impl<S: Io, F> Codec<S> for Box<Codec<S, Future=F>+Send>
+    where F: Future<Item=EncoderDone<S>, Error=Error>
+{
+    type Future = F;
+    fn start_write(&mut self, e: Encoder<S>) -> F {
         (**self).start_write(e)
     }
     fn headers_received(&mut self, headers: &Head) -> Result<RecvMode, Error> {
@@ -169,34 +173,40 @@ impl<S: Io> Codec<S> for Box<Codec<S>+Send> {
 /// boxing or have fine grained control, use `Proto` (which is a `Sink`)
 /// directly.
 ///
-pub trait Client<S: Io>: Sink<SinkItem=Box<Codec<S>>> {
+pub trait Client<S: Io, F>: Sink<SinkItem=Box<Codec<S, Future=F>>>
+    where F: Future<Item=EncoderDone<S>, Error=Error>,
+{
     fn fetch_url(&mut self, url: &str)
-        -> OptFuture<buffered::Response, Error>
+        -> Box<Future<Item=buffered::Response, Error=Error>>
+        where <Self as Sink>::SinkError: Into<Error>;
+}
+
+impl<T, S: Io> Client<S, FutureResult<EncoderDone<S>, Error>> for T
+    where T: Sink<SinkItem=Box<
+            Codec<S, Future=FutureResult<EncoderDone<S>, Error>>
+        >>,
+{
+    fn fetch_url(&mut self, url: &str)
+        -> Box<Future<Item=buffered::Response, Error=Error>>
         where <Self as Sink>::SinkError: Into<Error>
     {
         let url = match url.parse() {
             Ok(u) => u,
-            Err(_) => return OptFuture::Value(Err(Error::InvalidUrl)),
+            Err(_) => return Box::new(Err(Error::InvalidUrl).into_future()),
         };
         let (codec, receiver) = buffered::Buffered::get(url);
         match self.start_send(Box::new(codec)) {
             Ok(AsyncSink::NotReady(_)) => {
-                OptFuture::Value(Err(Error::Busy.into()))
+                Box::new(Err(Error::Busy.into()).into_future())
             }
             Ok(AsyncSink::Ready) => {
-                OptFuture::Future(
-                    receiver
+                Box::new(receiver
                     .map_err(|_| Error::Canceled.into())
-                    .and_then(|res| res)
-                    .boxed())
+                    .and_then(|res| res))
             }
             Err(e) => {
-                OptFuture::Value(Err(e.into()))
+                Box::new(Err(e.into()).into_future())
             }
         }
     }
 }
-
-impl<T, S: Io> Client<S> for T
-    where T: Sink<SinkItem=Box<Codec<S>>>
-{ }

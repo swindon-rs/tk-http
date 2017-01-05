@@ -10,15 +10,14 @@ use tokio_core::net::TcpStream;
 use tokio_core::reactor::Handle;
 use futures::{Future, AsyncSink, Async, Sink, StartSend, Poll};
 
-use OptFuture;
 use client::parser::Parser;
 use client::encoder::{self, get_inner};
 use client::{Codec, Error, EncoderDone, Config};
 
 
-enum OutState<S: Io> {
+enum OutState<S: Io, F> {
     Idle(WriteBuf<S>),
-    Write(Box<Future<Item=EncoderDone<S>, Error=Error>>),
+    Write(F),
     Void,
 }
 
@@ -33,7 +32,7 @@ enum InState<S: Io, C: Codec<S>> {
 /// Note, most of the time you need some reconnection facility and/or
 /// connection pooling on top of this interface
 pub struct Proto<S: Io, C: Codec<S>> {
-    writing: OutState<S>,
+    writing: OutState<S, C::Future>,
     waiting: VecDeque<(C, Arc<AtomicUsize>)>,
     reading: InState<S, C>,
     close: Arc<AtomicBool>,
@@ -94,23 +93,9 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
                         let state = Arc::new(AtomicUsize::new(0));
                         let e = encoder::new(io,
                                 state.clone(), self.close.clone());
-                        let (r, st) = match item.start_write(e) {
-                            OptFuture::Value(Ok(done)) => {
-                                (AsyncSink::Ready,
-                                 OutState::Idle(get_inner(done)))
-                            }
-                            // Note we break connection if serializer
-                            // errored, because we don't actually know if
-                            // connection can be reused safefully in this
-                            // case
-                            OptFuture::Value(Err(e)) => return Err(e),
-                            OptFuture::Future(fut) => {
-                                (AsyncSink::Ready, OutState::Write(fut))
-                            }
-                            OptFuture::Done => unreachable!(),
-                        };
+                        let fut = item.start_write(e);
                         self.waiting.push_back((item, state));
-                        (r, st)
+                        (AsyncSink::Ready, OutState::Write(fut))
                     }
                 }
             }
