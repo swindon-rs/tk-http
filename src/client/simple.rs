@@ -9,7 +9,6 @@ use ns_std_threaded::ThreadedResolver;
 use tokio_core::reactor::Handle;
 use tokio_core::net::TcpStream;
 
-use {OptFuture};
 use client::errors::Error;
 use client::proto::Proto;
 use client::buffered::{Buffered, Response};
@@ -39,18 +38,18 @@ pub fn fetch_once_buffered(url: Url, handle: &Handle)
     Box::new(match url.host().unwrap() {
         Host::Domain(dom) => {
             let ns = ThreadedResolver::new(CpuPool::new(1));
-            OptFuture::Future(ns.resolve(&format!("{}:{}", dom, port))
-                .map_err(Error::Name).boxed())
+            ns.resolve(&format!("{}:{}", dom, port))
+                .map_err(Error::Name).boxed()
         }
         Host::Ipv4(addr) => {
-            OptFuture::Value(Ok([
+            Ok([
                 SocketAddr::V4(SocketAddrV4::new(addr, port))
-            ].iter().cloned().collect()))
+            ].iter().cloned().collect()).into_future().boxed()
         }
         Host::Ipv6(addr) => {
-            OptFuture::Value(Ok([
+            Ok([
                 SocketAddr::V6(SocketAddrV6::new(addr, port, 0, 0))
-            ].iter().cloned().collect()))
+            ].iter().cloned().collect()).into_future().boxed()
         }
     }.and_then(|addr| {
         addr.pick_one().ok_or(NsError::NameNotFound).map_err(Error::Name)

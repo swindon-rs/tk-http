@@ -7,7 +7,6 @@ use httparse::Header;
 use client::{Error, Encoder, EncoderDone};
 use client::buffered;
 use enums::Version;
-use {OptFuture};
 
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
