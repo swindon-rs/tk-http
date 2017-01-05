@@ -31,6 +31,8 @@ pub struct Request {
     websocket_handshake: Option<WebsocketHandshake>,
 }
 
+/// A dispatcher that allows to process request and return response using
+/// a one single function
 pub struct BufferedDispatcher<S: Io, N: NewService<S>> {
     addr: SocketAddr,
     max_request_length: usize,
@@ -39,6 +41,8 @@ pub struct BufferedDispatcher<S: Io, N: NewService<S>> {
     phantom: PhantomData<S>,
 }
 
+/// A codec counterpart of the BufferedDispatcher, might be used with your
+/// own dispatcher too
 pub struct BufferedCodec<R> {
     max_request_length: usize,
     service: R,
@@ -46,27 +50,47 @@ pub struct BufferedCodec<R> {
     handle: Handle,
 }
 
+/// A helper to create a simple websocket (and HTTP) service
+///
+/// It's internally created by `BufferedDispatcher::new_with_websockets()`
 pub struct WebsocketFactory<H, I> {
     service: Arc<H>,
     websockets: Arc<I>,
 }
 
+/// An instance of websocket factory, created by WebsocketFactory itself
 pub struct WebsocketService<H, I, T, U> {
     service: Arc<H>,
     websockets: Arc<I>,
     phantom: PhantomData<(T, U)>,
 }
 
+/// A trait that you must implement to reply on requests, usually a function
 pub trait NewService<S: Io> {
+    /// Future returned by the service (an actual function serving request)
     type Future: Future<Item=EncoderDone<S>, Error=Error>;
+    /// Instance of the service, created for each request
     type Instance: Service<S, Future=Self::Future>;
+    /// Constructor of the instance of the service, created for each request
     fn new(&self) -> Self::Instance;
 }
 
+/// An instance of a NewService for a single request, usually just a function
 pub trait Service<S: Io> {
+    /// A future returned by `call()`
     type Future: Future<Item=EncoderDone<S>, Error=Error>;
+
+    /// A future returned by `start_websocket`, it's spawned on the main loop
+    /// hence needed to be static.
     type WebsocketFuture: Future<Item=(), Error=()> + 'static;
+
+    /// A method which is called when request arrives, including the websocket
+    /// negotiation request.
+    ///
+    /// See examples for a way to negotiate both websockets and services
     fn call(&mut self, request: Request, encoder: Encoder<S>) -> Self::Future;
+
+    /// A method which is called when websocket connection established
     fn start_websocket(&mut self, output: WriteFramed<S, WebsocketCodec>,
                                   input: ReadFramed<S, WebsocketCodec>)
         -> Self::WebsocketFuture;
@@ -184,6 +208,7 @@ impl<S: Io, N: NewService<S>> BufferedDispatcher<S, N> {
             phantom: PhantomData,
         }
     }
+    /// Sets max request length
     pub fn max_request_length(&mut self, value: usize) {
         self.max_request_length = value;
     }
@@ -196,6 +221,8 @@ impl<S: Io, H, I, T, U> BufferedDispatcher<S, WebsocketFactory<H, I>>
           T: Future<Item=EncoderDone<S>, Error=Error>,
           U: Future<Item=(), Error=()> + 'static,
 {
+    /// Creates a dispatcher with two functions: one serving http requests and
+    /// websockets.
     pub fn new_with_websockets(addr: SocketAddr, handle: &Handle,
         http: H, websockets: I)
         -> BufferedDispatcher<S, WebsocketFactory<H, I>>

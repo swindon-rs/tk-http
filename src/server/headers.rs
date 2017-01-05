@@ -11,6 +11,7 @@ use super::{Error, RequestTarget, Dispatcher};
 use super::codec::BodyKind;
 use super::encoder::ResponseConfig;
 use super::websocket::{self, WebsocketHandshake};
+use super::request_target;
 use headers;
 use {Version};
 
@@ -65,15 +66,17 @@ pub struct HeaderIter<'a> {
 }
 
 impl<'a> Head<'a> {
+    /// Returns a HTTP method
     pub fn method(&self) -> &str {
         self.method
-    }
-    pub fn raw_request_target(&self) -> &str {
-        self.raw_target
     }
     /// Request-target (the middle part of the first line of request)
     pub fn request_target(&self) -> &RequestTarget<'a> {
         &self.target
+    }
+    /// Returns a raw request target as string
+    pub fn raw_request_target(&self) -> &str {
+        self.raw_target
     }
     /// Returns path portion of request uri
     ///
@@ -222,7 +225,7 @@ fn scan_headers<'x>(raw_request: &'x Request)
     let mut body = Fixed(0);
     let mut connection = None::<Cow<_>>;
     let mut host_header = false;
-    let target = RequestTarget::parse(raw_request.path.unwrap())
+    let target = request_target::parse(raw_request.path.unwrap())
         .ok_or(BadRequestTarget)?;
     let mut conflicting_host = false;
     let mut host = match target {

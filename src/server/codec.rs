@@ -57,6 +57,10 @@ pub enum RecvMode {
 
 /// This is a low-level interface to the http server
 pub trait Dispatcher<S: Io> {
+    /// The codec type  for this dispatcher
+    ///
+    /// In many cases the type is just `Box<Codec<S>>`, but it left as
+    /// associated type make different types of middleware cheaper.
     type Codec: Codec<S>;
 
     /// Received headers of a request
@@ -69,6 +73,8 @@ pub trait Dispatcher<S: Io> {
         -> Result<Self::Codec, Error>;
 }
 
+/// The type represents a consumer of a single request and yields a writer of
+/// a response (the latter is a ``ResponseFuture``
 pub trait Codec<S: Io> {
     /// This is a future returned by `start_response`
     ///
@@ -122,7 +128,7 @@ pub trait Codec<S: Io> {
     /// is `Hijack`
     ///
     /// Note: both input and output buffers can contain some data.
-    fn hijack(&mut self, output: WriteBuf<S>,  input: ReadBuf<S>) {
+    fn hijack(&mut self, _output: WriteBuf<S>,  _input: ReadBuf<S>) {
         panic!("`Codec::recv_mode` returned `Hijack` but \
             no hijack() method implemented");
     }

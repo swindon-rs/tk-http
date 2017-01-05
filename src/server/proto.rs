@@ -192,7 +192,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                             }
                             Body(BodyState {
                                 mode: Progressive(_),
-                                codec: ref mut codec, ..})
+                                codec: ref mut _codec, ..})
                             => {
                                 // TODO(tailhook) start writing now
                                 unimplemented!();

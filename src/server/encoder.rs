@@ -1,14 +1,13 @@
 use std::io;
 use std::fmt::Display;
 
-use futures::{Async, Future, Poll};
+use futures::{Future, Poll};
 use tokio_core::io::Io;
 use tk_bufstream::{Flushed, WriteBuf, WriteRaw, FutureWriteRaw};
 
 use base_serializer::{MessageState, HeaderError};
 use enums::{Version, Status};
 use super::headers::Head;
-use super::Error;
 
 
 /// This a response writer that you receive in `Codec`
@@ -40,8 +39,20 @@ pub struct ResponseConfig {
     pub version: Version,
 }
 
+/// A future that yields `RawBody` after buffer is empty
+///
+/// This future is created by `Encoder::raw_body()``
 pub struct FutureRawBody<S>(FutureWriteRaw<S>);
 
+/// The actual raw body
+///
+/// The object is used to write some data directly to the socket without any
+/// buffering/copying. Note that chunked encoding must be handled manually
+/// in this case.
+///
+/// This is a tiny wrapper around `WriteRaw` which is basically tiny wrapper
+/// around TcpStream or whatever `S` represents. Wrappers are used to
+/// reconstruct original object, `EncoderDone` in this case.
 pub struct RawBody<S> {
     io: WriteRaw<S>,
 }
@@ -258,7 +269,9 @@ impl<S: Io> Encoder<S> {
 }
 
 impl<S: Io> RawBody<S> {
-    pub fn done(mut self) -> EncoderDone<S> {
+    /// Returns `EncoderDone` object that might be passed back to the HTTP
+    /// protocol
+    pub fn done(self) -> EncoderDone<S> {
         EncoderDone { buf: self.io.into_buf() }
     }
 }
@@ -323,11 +336,8 @@ impl<S: Io> Future for FutureRawBody<S> {
 
 #[cfg(feature="sendfile")]
 mod sendfile {
-    use std::io;
     use std::os::unix::io::{AsRawFd, RawFd};
-    use futures::Async;
     use tokio_core::io::Io;
-    use tokio_core::net::TcpStream;
     use super::RawBody;
 
     impl<T: Io + AsRawFd> AsRawFd for RawBody<T> {

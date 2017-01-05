@@ -5,7 +5,6 @@ use std::str::{from_utf8, from_utf8_unchecked};
 use sha1::Sha1;
 
 use super::{Head};
-use super::codec::BodyKind;
 
 const GUID: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -15,6 +14,7 @@ const GUID: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 /// Or use any other thing that supports `Display`.
 pub struct WebsocketAccept([u8; 20]);
 
+/// Contains all the imporant parts of a websocket handshake
 #[derive(Debug)]
 pub struct WebsocketHandshake {
     /// The destination value of `Sec-WebSocket-Accept`
