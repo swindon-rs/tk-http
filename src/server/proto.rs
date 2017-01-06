@@ -207,7 +207,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                             (Idle(get_inner(x)), true)
                         }
                         Async::NotReady => {
-                            (Write(f), true)
+                            (Write(f), false)
                         }
                     }
                 }
@@ -221,7 +221,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                             return Ok(true);
                         }
                         Async::NotReady => {
-                            (Write(f), true)
+                            (Write(f), false)
                         }
                     }
                 }
