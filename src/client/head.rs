@@ -28,6 +28,15 @@ impl<'a> Head<'a> {
     pub fn status(&self) -> Option<Status> {
         Status::from(self.code)
     }
+    /// Returns raw status code and reason as received even
+    ///
+    /// This returns something even if `status()` returned `None`.
+    ///
+    /// Note: the reason string may not match the status code or may even be
+    /// an empty string.
+    pub fn raw_status(&self) -> (u16, &'a str) {
+        (self.code, self.reason)
+    }
     /// Iterator over the headers of HTTP request
     ///
     /// This iterator strips the following kinds of headers:
