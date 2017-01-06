@@ -59,14 +59,12 @@ pub fn main() {
                 File::create(filename).expect("can't open file for headers"))
         };
         writeln!(&mut out, "HTTP/1.x {} {}",
-            response.code(), response.reason()).unwrap();
+            response.status().code(), response.status().reason()).unwrap();
         for &(ref k, ref v) in response.headers() {
             writeln!(&mut out,
                 "{}: {}", k, String::from_utf8_lossy(v)).unwrap();
         }
         writeln!(&mut out, "").unwrap();
     }
-    response.body().map(|data| {
-        io::stdout().write_all(data).unwrap();
-    });
+    io::stdout().write_all(response.body()).unwrap();
 }

@@ -15,6 +15,7 @@ use futures::future::{FutureResult, ok};
 use futures::sync::oneshot::{channel, Sender, Receiver};
 use tokio_core::io::Io;
 
+use enums::Status;
 use enums::Version;
 use client::{Error, Codec, Encoder, EncoderDone, Head};
 use client::client::RecvMode;
@@ -33,28 +34,23 @@ pub struct Buffered {
 #[derive(Debug)]
 /// A buffered response holds contains a body as contiguous chunk of data
 pub struct Response {
-    code: u16,
-    reason: String,
+    status: Status,
     headers: Vec<(String, Vec<u8>)>,
-    body: Option<Vec<u8>>,
+    body: Vec<u8>,
 }
 
 impl Response {
-    /// Get response code
-    pub fn code(&self) -> u16 {
-        self.code
-    }
-    /// Get response reason (you shouldn't rely on this, use `code()`)
-    pub fn reason(&self) -> &str {
-        &self.reason
+    /// Get response status
+    pub fn status(&self) -> Status {
+        self.status
     }
     /// Get response headers
     pub fn headers(&self) -> &[(String, Vec<u8>)] {
         &self.headers
     }
     /// Get response body
-    pub fn body(&self) -> Option<&[u8]> {
-        self.body.as_ref().map(|x| &x[..])
+    pub fn body(&self) -> &[u8] {
+        &self.body
     }
 }
 
@@ -69,13 +65,13 @@ impl<S: Io> Codec<S> for Buffered {
         ok(e.done())
     }
     fn headers_received(&mut self, headers: &Head) -> Result<RecvMode, Error> {
+        let status = headers.status().ok_or(Error::InvalidStatus)?;
         self.response = Some(Response {
-            code: headers.code,
-            reason: headers.reason.to_string(),
-            headers: headers.headers.iter().map(|&header| {
-                (header.name.to_string(), header.value.to_vec())
+            status: status,
+            headers: headers.headers().map(|(k, v)| {
+                (k.to_string(), v.to_vec())
             }).collect(),
-            body: None,
+            body: Vec::new(),
         });
         Ok(RecvMode::Buffered(self.max_response_length))
     }
@@ -84,7 +80,7 @@ impl<S: Io> Codec<S> for Buffered {
     {
         assert!(end);
         let mut response = self.response.take().unwrap();
-        response.body = Some(data.to_vec());
+        response.body = data.to_vec();
         self.sender.take().unwrap().complete(Ok(response));
         Ok(Async::Ready(data.len()))
     }

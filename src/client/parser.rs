@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::borrow::Cow;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::str::from_utf8;
 use std::ascii::AsciiExt;
@@ -9,12 +10,12 @@ use httparse;
 use tk_bufstream::{ReadBuf, Buf};
 
 use enums::Version;
-use client::client::{BodyKind, RecvMode, Head};
+use client::client::{BodyKind, RecvMode};
 use headers;
 use chunked;
 use body_parser::BodyProgress;
 use client::encoder::RequestState;
-use client::{Codec, Error};
+use client::{Codec, Error, Head};
 
 
 /// Number of headers to allocate on a stack
@@ -43,8 +44,8 @@ pub struct Parser<S: Io, C: Codec<S>> {
 }
 
 
-fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
-    -> Result<(BodyKind, bool), Error>
+fn scan_headers<'x>(is_head: bool, code: u16, headers: &'x [httparse::Header])
+    -> Result<(BodyKind, Option<Cow<'x, str>>, bool), Error>
 {
     /// Implements the body length algorithm for requests:
     /// http://httpwg.github.io/specs/rfc7230.html#message.body.length
@@ -56,18 +57,26 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
     /// 3. If Content-Length -> Fixed
     /// 4. Else Eof
     use client::client::BodyKind::*;
+    use client::errors::Error::ConnectionInvalid;
     let mut has_content_length = false;
+    let mut connection = None::<Cow<_>>;
     let mut close = false;
     if is_head || (code > 100 && code < 200) || code == 204 || code == 304 {
         for header in headers.iter() {
             // TODO(tailhook) check for transfer encoding and content-length
             if header.name.eq_ignore_ascii_case("Connection") {
+                let strconn = from_utf8(header.value)
+                    .map_err(|_| ConnectionInvalid)?.trim();
+                connection = match connection {
+                    Some(x) => Some(x + ", " + strconn),
+                    None => Some(strconn.into()),
+                };
                 if header.value.split(|&x| x == b',').any(headers::is_close) {
                     close = true;
                 }
             }
         }
-        return Ok((Fixed(0), close))
+        return Ok((Fixed(0), connection, close))
     }
     let mut result = BodyKind::Eof;
     for header in headers.iter() {
@@ -98,12 +107,18 @@ fn scan_headers(is_head: bool, code: u16, headers: &[httparse::Header])
                 close = true;
             }
         } else if header.name.eq_ignore_ascii_case("Connection") {
+            let strconn = from_utf8(header.value)
+                .map_err(|_| ConnectionInvalid)?.trim();
+            connection = match connection {
+                Some(x) => Some(x + ", " + strconn),
+                None => Some(strconn.into()),
+            };
             if header.value.split(|&x| x == b',').any(headers::is_close) {
                 close = true;
             }
         }
     }
-    Ok((result, close))
+    Ok((result, connection, close))
 }
 
 fn new_body(mode: BodyKind, recv_mode: RecvMode)
@@ -148,7 +163,7 @@ fn parse_headers<S: Io, C: Codec<S>>(
                 _ => return Ok(None),
             }
         };
-        let (body, close) = try!(scan_headers(is_head, code, &headers));
+        let (body, conn, close) = try!(scan_headers(is_head, code, &headers));
         let head = Head {
             version: if ver == 1
                 { Version::Http11 } else { Version::Http10 },
@@ -156,9 +171,10 @@ fn parse_headers<S: Io, C: Codec<S>>(
             reason: reason,
             headers: headers,
             body_kind: body,
+            connection_header: conn,
             // For HTTP/1.0 we could implement Connection: Keep-Alive
             // but hopefully it's rare enough to ignore nowadays
-            close: close || ver == 0,
+            connection_close: close || ver == 0,
         };
         let mode = codec.headers_received(&head)?;
         (mode, body, close, bytes)

@@ -1,10 +1,12 @@
+use std::borrow::Cow;
+
 use futures::sink::Sink;
 use futures::future::FutureResult;
 use futures::{Async, AsyncSink, Future, IntoFuture};
 use tokio_core::io::Io;
 use httparse::Header;
 
-use client::{Error, Encoder, EncoderDone};
+use client::{Error, Encoder, EncoderDone, Head};
 use client::buffered;
 use enums::Version;
 
@@ -49,26 +51,6 @@ pub enum RecvMode {
     /// request body as a persistent connection for sending multiple messages
     /// on-demand)
     Progressive(usize),
-}
-
-
-/// A borrowed structure that represents response headers
-///
-/// It's passed to `Codec::headers_received` and you are free to store or
-/// discard any needed fields and headers from it.
-///
-/// Note, we don't strip hop-by-hop headers (`Connection: close`,
-/// `Transfer-Encoding`) and we use them to ensure correctness of the protocol.
-/// You must skip them if proxying headers somewhere.
-// TODO(tailhook) hide the structure?
-#[derive(Debug)]
-pub struct Head<'a> {
-    pub version: Version,
-    pub code: u16,
-    pub reason: &'a str,
-    pub headers: &'a [Header<'a>],
-    pub body_kind: BodyKind,
-    pub close: bool,
 }
 
 

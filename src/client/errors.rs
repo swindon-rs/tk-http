@@ -91,6 +91,16 @@ quick_error! {
         ResponseBodyTooLong {
             description("response body too long")
         }
+        /// Connection header is invalid
+        ConnectionInvalid {
+            description("invalid connection header in response")
+        }
+        /// Unsupported status returned by server
+        ///
+        /// You have to write your own Codec to handle unsupported status codes
+        InvalidStatus {
+            description("unsupported status")
+        }
     }
 }
 

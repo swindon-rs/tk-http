@@ -54,7 +54,7 @@ pub struct Head<'a> {
     connection_header: Option<Cow<'a, str>>,
 }
 
-/// Iterator over all meaningfull headers for the request
+/// Iterator over all meaningful headers for the request
 ///
 /// This iterator is created by `Head::headers`. And iterates over all
 /// headers except hop-by-hop ones and `Host`.
@@ -135,7 +135,7 @@ impl<'a> Head<'a> {
     ///    this also includes cases where length is implicitly set to zero.
     /// 3. `Connection` header might be discovered with `connection_close()`
     ///    or `connection_header()`
-    /// 3. `Upgrade` might be discovered with `get_websocket_upgrade()` or
+    /// 4. `Upgrade` might be discovered with `get_websocket_upgrade()` or
     ///    only looked in `all_headers()` if `upgrade` presents in
     ///    `connection_header()`
     pub fn headers(&self) -> HeaderIter {
@@ -266,7 +266,6 @@ fn scan_headers<'x>(raw_request: &'x Request)
                 Some(x) => Some(x + ", " + strconn),
                 None => Some(strconn.into()),
             };
-            // TODO(tailhook) capture connection header(s) itself
             if header.value.split(|&x| x == b',').any(headers::is_close) {
                 close = true;
             }
