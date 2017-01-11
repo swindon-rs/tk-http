@@ -44,6 +44,10 @@ pub fn get_handshake(req: &Head) -> Result<Option<WebsocketHandshake>, ()> {
     if !conn_upgrade.unwrap_or(false) {
         return Ok(None);
     }
+    if req.path().is_none() {
+        debug!("Invalid request-target for websocket request");
+        return Err(());
+    }
     let mut upgrade = false;
     let mut version = false;
     let mut accept = None;
