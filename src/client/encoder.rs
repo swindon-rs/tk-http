@@ -1,3 +1,4 @@
+use std::io;
 use std::fmt::Display;
 use std::ascii::AsciiExt;
 use std::sync::Arc;
@@ -179,5 +180,17 @@ pub fn new<S: Io>(io: WriteBuf<S>,
         buf: io,
         state: state,
         close_signal: close_signal,
+    }
+}
+
+impl<S: Io> io::Write for Encoder<S> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // TODO(tailhook) we might want to propatage error correctly
+        // rather than panic
+        self.write_body(buf);
+        Ok((buf.len()))
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
