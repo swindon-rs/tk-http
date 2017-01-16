@@ -52,6 +52,9 @@ pub enum RecvMode {
     /// Don't read request body and hijack connection after response headers
     /// are sent. Useful for connection upgrades, including websockets and
     /// for CONNECT method.
+    ///
+    /// Note: `data_received` method of Codec is never called for `Hijack`d
+    /// connection.
     Hijack,
 }
 

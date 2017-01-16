@@ -221,7 +221,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                             return Ok(true);
                         }
                         Async::NotReady => {
-                            (Write(f), false)
+                            (Switch(f, codec), false)
                         }
                     }
                 }
