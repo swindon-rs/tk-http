@@ -24,4 +24,5 @@ pub use self::dispatcher::{Loop, Dispatcher};
 pub struct Config {
     ping_interval: Duration,
     inactivity_timeout: Duration,
+    max_packet_size: usize,
 }

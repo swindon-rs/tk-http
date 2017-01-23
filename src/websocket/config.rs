@@ -9,6 +9,7 @@ impl Config {
         Config {
             ping_interval: Duration::new(10, 0),
             inactivity_timeout: Duration::new(30, 0),
+            max_packet_size: 10 << 20,
         }
     }
     /// Set ping interval
@@ -50,6 +51,16 @@ impl Config {
         self.inactivity_timeout = dur;
         self
     }
+
+    /// Maximum packet size
+    ///
+    /// If some frame declares size larger than this, we immediately abort
+    /// the connection
+    pub fn max_packet_size(&mut self, size: usize) -> &mut Self {
+        self.max_packet_size = size;
+        self
+    }
+
     /// Create a Arc'd config clone to pass to the constructor
     ///
     /// This is just a convenience method.

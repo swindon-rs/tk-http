@@ -21,6 +21,7 @@ use minihttp::{Status};
 use minihttp::server::buffered::{Request, BufferedDispatcher};
 use minihttp::server::{Encoder, EncoderDone, Config, Proto, Error};
 use minihttp::websocket::{Loop, Config as WebsockConfig, Dispatcher, Frame};
+use minihttp::websocket::{Error as WsErr};
 use minihttp::websocket::Packet::{self, Text};
 
 
@@ -63,8 +64,8 @@ fn service<S:Io>(req: Request, mut e: Encoder<S>)
 struct Echo(UnboundedSender<Packet>);
 
 impl Dispatcher for Echo {
-    type Future = FutureResult<(), ()>;
-    fn frame(&mut self, frame: &Frame) -> FutureResult<(), ()> {
+    type Future = FutureResult<(), WsErr>;
+    fn frame(&mut self, frame: &Frame) -> FutureResult<(), WsErr> {
         self.0.start_send(frame.into()).unwrap();
         ok(())
     }
@@ -104,7 +105,9 @@ fn main() {
                                 .map_err(|_| ())
                             })
                             .then(|_| Ok(())));
+                        let rx = rx.map_err(|_| format!("stream closed"));
                         Loop::new(out, inp, rx, Echo(tx), &wcfg)
+                        .map_err(|e| println!("websocket closed: {}", e))
                     }))
             .map_err(|e| { println!("Connection error: {}", e); })
             .then(|_| Ok(())) // don't fail, please
