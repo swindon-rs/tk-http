@@ -28,6 +28,19 @@ impl<'a> Into<Packet> for Frame<'a> {
     }
 }
 
+impl<'a> Into<Packet> for &'a Frame<'a> {
+    fn into(self) -> Packet {
+        use self::Frame as F;
+        use super::Packet as P;
+        match *self {
+            F::Ping(x) => P::Ping(x.to_owned()),
+            F::Pong(x) => P::Pong(x.to_owned()),
+            F::Text(x) => P::Text(x.to_owned()),
+            F::Binary(x) => P::Binary(x.to_owned()),
+        }
+    }
+}
+
 
 pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize)
     -> Result<Option<(Frame<'x>, usize)>, Error>
