@@ -106,24 +106,22 @@ impl<S: Io, T, D, E> Future for Loop<S, T, D>
         }
 
         loop {
-            if self.input.in_buf.len() > 0 {
-                let result = match
+            while self.input.in_buf.len() > 0 {
+                let (mut fut, nbytes) = match
                     parse_frame(&mut self.input.in_buf,
                                 self.config.max_packet_size)?
                 {
                     Some((frame, nbytes)) => {
-                        Some((self.dispatcher.frame(&frame), nbytes))
+                        (self.dispatcher.frame(&frame), nbytes)
                     }
-                    None => None,
+                    None => break,
                 };
-                if let Some((mut fut, nbytes)) = result {
-                    self.input.in_buf.consume(nbytes);
-                    match fut.poll()? {
-                        Async::Ready(()) => {},
-                        Async::NotReady => {
-                            self.backpressure = Some(fut);
-                            return Ok(Async::NotReady)
-                        }
+                self.input.in_buf.consume(nbytes);
+                match fut.poll()? {
+                    Async::Ready(()) => {},
+                    Async::NotReady => {
+                        self.backpressure = Some(fut);
+                        return Ok(Async::NotReady)
                     }
                 }
             }
