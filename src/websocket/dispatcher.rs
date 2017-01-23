@@ -75,7 +75,7 @@ impl<S: Io, T, D, E> Loop<S, T, D>
                 Some(pkt) => {
                     Codec.encode(pkt, &mut self.output.out_buf);
                 }
-                None => {}
+                None => break,
             }
         }
         Ok(())
