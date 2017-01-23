@@ -15,13 +15,13 @@ use tokio_core::net::{TcpListener};
 use tokio_core::io::Io;
 use futures::{Stream, Future, Sink};
 use futures::future::{FutureResult, ok};
-use futures::sync::mpsc::channel;
+use futures::sync::mpsc::{unbounded, UnboundedSender};
 
 use minihttp::{Status};
 use minihttp::server::buffered::{Request, BufferedDispatcher};
 use minihttp::server::{Encoder, EncoderDone, Config, Proto, Error};
-use minihttp::websocket::{Loop, Config as WebsockConfig};
-use minihttp::websocket::Packet::Text;
+use minihttp::websocket::{Loop, Config as WebsockConfig, Dispatcher, Frame};
+use minihttp::websocket::Packet::{self, Text};
 
 
 const INDEX: &'static str = include_str!("ws.html");
@@ -60,6 +60,16 @@ fn service<S:Io>(req: Request, mut e: Encoder<S>)
     }
 }
 
+struct Echo(UnboundedSender<Packet>);
+
+impl Dispatcher for Echo {
+    type Future = FutureResult<(), ()>;
+    fn frame(&mut self, frame: &Frame) -> FutureResult<(), ()> {
+        self.0.start_send(frame.into()).unwrap();
+        ok(())
+    }
+}
+
 
 fn main() {
     if env::var("RUST_LOG").is_err() {
@@ -84,16 +94,17 @@ fn main() {
                 BufferedDispatcher::new_with_websockets(addr, &h1,
                     service,
                     move |out, inp| {
-                        let (tx, rx) = channel(1);
+                        let (tx, rx) = unbounded();
+                        let tx2 = tx.clone();
                         h2.spawn(
                             Timeout::new(Duration::new(10, 0), &h2).unwrap()
                             .map_err(|_| unreachable!())
                             .and_then(move |_| {
-                                tx.send(Text("hello".to_string()))
+                                tx2.send(Text("hello".to_string()))
                                 .map_err(|_| ())
                             })
                             .then(|_| Ok(())));
-                        Loop::new(out, inp, rx, &wcfg)
+                        Loop::new(out, inp, rx, Echo(tx), &wcfg)
                     }))
             .map_err(|e| { println!("Connection error: {}", e); })
             .then(|_| Ok(())) // don't fail, please
