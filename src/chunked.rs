@@ -3,7 +3,7 @@ use tk_bufstream::Buf;
 
 
 // TODO(tailhook) review usizes here, probaby we may accept u64
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct State {
     buffered: usize,
     pending: usize,
@@ -20,6 +20,9 @@ impl State {
     }
     pub fn parse(&mut self, buf: &mut Buf) -> Result<(), InvalidChunkSize> {
         let State { ref mut buffered, ref mut pending, ref mut done } = *self;
+        if *done {
+            return Ok(());
+        }
         while *buffered < buf.len() {
             if *pending == 0 {
                 use httparse::Status::*;
@@ -41,9 +44,11 @@ impl State {
                     }
                 }
             } else {
-                if *buffered + *pending <= buf.len() {
+                if *buffered + *pending + 2 <= buf.len() {
                     *buffered += *pending;
                     *pending = 0;
+                    // TODO(tailhook) optimize this
+                    buf.remove_range(*buffered..*buffered+2);
                 } else {
                     *pending -= buf.len() - *buffered;
                     *buffered = buf.len();
@@ -61,5 +66,26 @@ impl State {
     pub fn consume(&mut self, n: usize) {
         assert!(self.buffered >= n);
         self.buffered -= n;
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::State;
+    use tk_bufstream::Buf;
+
+    #[test]
+    fn simple() {
+        let mut state = State::new();
+        let mut buf = Buf::new();
+        buf.extend(b"4\r\nhell\r\n");
+        assert_eq!(state.parse(&mut buf), Ok(()));
+        assert_eq!(state, State { buffered: 4, pending: 0, done: false });
+        state.consume(4);
+        buf.consume(4);
+        assert_eq!(state.buffered, 0);
+        buf.extend(b"0\r\n");
+        assert_eq!(state.parse(&mut buf), Ok(()));
+        assert_eq!(state, State { buffered: 0, pending: 0, done: true });
     }
 }
