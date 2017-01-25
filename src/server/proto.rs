@@ -142,17 +142,17 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                                     (body.response_config, body.codec));
                                 (Headers, true)
                             } else {
-                                (Body(body), true)
+                                (Body(body), true) // TODO(tailhook) check
                             }
                         }
                         Some(Async::NotReady) => {
                             if matches!(body.mode, RecvMode::Progressive(x) if x > bytes) {
                                 (Body(body), false)
                             } else {
-                                (Body(body), true)
+                                (Body(body), true) // TODO(tailhook) check
                             }
                         }
-                        None => (Body(body), true),
+                        None => (Body(body), false),
                     }
                 }
                 Hijack => (Hijack, false),
