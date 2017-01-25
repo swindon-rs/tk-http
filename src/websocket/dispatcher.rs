@@ -5,7 +5,7 @@ use futures::{Future, Async, Stream};
 use futures::stream::Fuse;
 use tokio_core::io::Io;
 use tk_bufstream::{ReadFramed, WriteFramed, ReadBuf, WriteBuf};
-use tk_bufstream::{Decode, Encode};
+use tk_bufstream::{Encode};
 
 use websocket::{Frame, Config, Codec, Packet, Error};
 use websocket::zero_copy::parse_frame;
@@ -136,6 +136,5 @@ impl<S: Io, T, D, E> Future for Loop<S, T, D>
                 _ => continue,
             }
         }
-        unreachable!();
     }
 }

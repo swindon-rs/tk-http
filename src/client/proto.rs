@@ -12,7 +12,7 @@ use futures::{Future, AsyncSink, Async, Sink, StartSend, Poll};
 
 use client::parser::Parser;
 use client::encoder::{self, get_inner};
-use client::{Codec, Error, EncoderDone, Config};
+use client::{Codec, Error, Config};
 
 
 enum OutState<S: Io, F> {

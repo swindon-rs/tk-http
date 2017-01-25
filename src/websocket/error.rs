@@ -1,31 +1,38 @@
 use std::io;
-use std::str::{from_utf8, Utf8Error};
+use std::str::{Utf8Error};
 
 
 quick_error! {
+    /// Websocket error
     #[derive(Debug)]
     pub enum Error {
+        /// Socket IO error
         Io(err: io::Error) {
             description("IO error")
             display("IO error: {}", err)
             from()
         }
+        /// Text frame can't be decoded
         InvalidUtf8(err: Utf8Error) {
             description("Error decoding text frame")
             display("Error decoding text frame: {}", err)
             from()
         }
+        /// Got websocket message with wrong opcode
         InvalidOpcode(code: u8) {
             description("Opcode of the frame is invalid")
             display("Opcode of the frame is invalid: {}", code)
             from()
         }
+        /// Got unmasked frame
         Unmasked {
             description("Received unmasked frame")
         }
+        /// Got fragmented frame (fragmented frames are not supported yet)
         Fragmented {
             description("Received fragmented frame")
         }
+        /// Received frame that is longer than configured limit
         TooLong {
             description("Received frame that is too long")
         }

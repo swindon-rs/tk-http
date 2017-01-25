@@ -197,6 +197,7 @@ impl<S: Io, T, F> Service<S> for T
 
 
 impl<S: Io, N: NewService<S>> BufferedDispatcher<S, N> {
+    /// Create an instance of bufferd dispatcher
     pub fn new(addr: SocketAddr, handle: &Handle, service: N)
         -> BufferedDispatcher<S, N>
     {

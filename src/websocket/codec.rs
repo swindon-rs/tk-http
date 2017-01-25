@@ -1,12 +1,16 @@
 use std::io;
 use tk_bufstream::{Buf, Encode, Decode};
 
-use super::{Packet, Error};
+use super::{Packet};
 use super::zero_copy::{parse_frame, write_packet};
 
 
 const MAX_PACKET_SIZE: usize = 10 << 20;
 
+/// Websocket codec for use with tk-bufstream in `Codec::hijack()`
+///
+/// This codec is used out of the box in
+/// `BufferedDispatcher::new_with_websockets`
 pub struct Codec;
 
 

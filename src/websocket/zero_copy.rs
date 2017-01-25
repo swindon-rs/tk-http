@@ -1,7 +1,6 @@
 use std::str::from_utf8;
 
 use tk_bufstream::Buf;
-use futures::Poll;
 use byteorder::{BigEndian, ByteOrder};
 
 use super::{Error, Packet};
@@ -9,9 +8,13 @@ use super::{Error, Packet};
 
 /// A borrowed frame of websocket data
 pub enum Frame<'a> {
+    /// Ping mesage
     Ping(&'a [u8]),
+    /// Pong mesage
     Pong(&'a [u8]),
+    /// Text (utf-8) message
     Text(&'a str),
+    /// Binary message
     Binary(&'a [u8]),
 }
 
@@ -127,6 +130,8 @@ pub fn write_packet(buf: &mut Buf, opcode: u8, data: &[u8]) {
     }
     buf.extend(data);
 }
+
+/// Write close message to websocket
 pub fn write_close(buf: &mut Buf, code: u16, reason: &str) {
     let data = reason.as_bytes();
     assert!(data.len() <= 123);

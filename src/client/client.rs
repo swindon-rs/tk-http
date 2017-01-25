@@ -1,14 +1,10 @@
-use std::borrow::Cow;
-
 use futures::sink::Sink;
 use futures::future::FutureResult;
 use futures::{Async, AsyncSink, Future, IntoFuture};
 use tokio_core::io::Io;
-use httparse::Header;
 
 use client::{Error, Encoder, EncoderDone, Head};
 use client::buffered;
-use enums::Version;
 
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -63,6 +59,7 @@ pub enum RecvMode {
 /// `client::buffered::Buffered` codec implementation instead of implemeting
 /// this trait manually.
 pub trait Codec<S: Io> {
+    /// Future that `start_write()` returns
     type Future: Future<Item=EncoderDone<S>, Error=Error>;
 
     /// Start writing a request
@@ -157,6 +154,7 @@ impl<S: Io, F> Codec<S> for Box<Codec<S, Future=F>+Send>
 pub trait Client<S: Io, F>: Sink<SinkItem=Box<Codec<S, Future=F>>>
     where F: Future<Item=EncoderDone<S>, Error=Error>,
 {
+    /// Simple fetch helper
     fn fetch_url(&mut self, url: &str)
         -> Box<Future<Item=buffered::Response, Error=Error>>
         where <Self as Sink>::SinkError: Into<Error>;

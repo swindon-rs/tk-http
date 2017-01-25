@@ -1,12 +1,10 @@
-use std::borrow::Cow;
 use std::ascii::AsciiExt;
 use std::slice::Iter as SliceIter;
 
 use httparse::Header;
 
-use enums::{Version, Status};
+use enums::{Status};
 use client::Head;
-use client::client::BodyKind;
 
 
 /// Iterator over all meaningful headers for the response
