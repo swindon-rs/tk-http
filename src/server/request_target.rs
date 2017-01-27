@@ -76,7 +76,6 @@ pub fn parse(s: &str) -> Option<RequestTarget> {
 
 #[cfg(test)]
 mod test {
-    use super::RequestTarget;
     use super::RequestTarget::*;
     use super::parse;
 
