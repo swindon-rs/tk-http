@@ -84,6 +84,13 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
     fn do_reads(&mut self) -> Result<bool, Error> {
         use self::InState::*;
         let mut changed = false;
+        let mut inbuf = self.inbuf.as_mut();
+        let mut inbuf = if let Some(ref mut inbuf) = inbuf {
+            inbuf
+        } else {
+            // Buffer has been stolen
+            return Ok(false);
+        };
         loop {
             let limit = match self.reading {
                 Headers => self.config.inflight_request_limit,
@@ -94,7 +101,6 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                 break;
             }
             // TODO(tailhook) Do reads after parse_headers() [optimization]
-            let ref mut inbuf = self.inbuf.as_mut().expect("buffer exists");
             inbuf.read()?;
             let (next, cont) = match mem::replace(&mut self.reading, Closed) {
                 Headers => {
@@ -165,7 +171,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
         }
         Ok(changed)
     }
-    fn do_writes(&mut self) -> Result<bool, Error> {
+    fn do_writes(&mut self) -> Result<(), Error> {
         use self::OutState::*;
         use self::InState::*;
         use server::RecvMode::{BufferedUpfront, Progressive};
@@ -218,7 +224,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                             let rd = self.inbuf.take()
                                 .expect("can hijack only once");
                             codec.hijack(wr, rd);
-                            return Ok(true);
+                            return Ok(());
                         }
                         Async::NotReady => {
                             (Switch(f, codec), false)
@@ -229,7 +235,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
             };
             self.writing = next;
             if !cont {
-                return Ok(false);
+                return Ok(());
             }
         }
     }
@@ -240,15 +246,15 @@ impl<S: Io, D: Dispatcher<S>> Future for Proto<S, D> {
     type Error = Error;
 
     fn poll(&mut self) -> Poll<(), Error> {
-        if self.do_writes()? {
-            return Ok(Async::Ready(()));
-        }
+        self.do_writes()?;
         while self.do_reads()? {
-            if self.do_writes()? {
-                return Ok(Async::Ready(()));
-            }
+            self.do_writes()?;
         }
-        // TODO(tailhook) close connection on `Connection: close`
-        Ok(Async::NotReady)
+        if self.inbuf.as_ref().map(|x| x.done()).unwrap_or(true) {
+            Ok(Async::Ready(()))
+        } else {
+            // TODO(tailhook) close connection on `Connection: close`
+            Ok(Async::NotReady)
+        }
     }
 }
