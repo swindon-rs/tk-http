@@ -228,21 +228,6 @@ impl<S: Io> Encoder<S> {
         self.state.done(&mut self.io.out_buf);
         EncoderDone { buf: self.io }
     }
-    /// Returns a future which yields a socket when the buffer is flushed to
-    /// the socket
-    ///
-    /// It yield only socket because there is no reason for holding empty
-    /// buffer. This is useful to implement `sendfile` or any other custom
-    /// way of sending data to the socket.
-    ///
-    /// # Panics
-    ///
-    /// Currently method panics when done_headers is not called yet
-    pub fn steal_socket(self) -> Flushed<S> {
-        assert!(self.state.is_after_headers());
-        unimplemented!()
-        //self.io.flushed()
-    }
     /// Returns a raw body for zero-copy writing techniques
     ///
     /// Note: we don't assert on the format of the body if you're using this
