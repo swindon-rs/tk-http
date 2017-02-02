@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use futures::{Future, Poll};
 use tokio_core::io::Io;
-use tk_bufstream::{Flushed, WriteBuf, WriteRaw, FutureWriteRaw};
+use tk_bufstream::{WriteBuf, WriteRaw, FutureWriteRaw};
 
 use base_serializer::{MessageState, HeaderError};
 use enums::{Version, Status};

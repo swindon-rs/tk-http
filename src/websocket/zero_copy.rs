@@ -16,6 +16,8 @@ pub enum Frame<'a> {
     Text(&'a str),
     /// Binary message
     Binary(&'a [u8]),
+    /// Close message
+    Close(u16, &'a str),
 }
 
 impl<'a> Into<Packet> for Frame<'a> {
@@ -27,6 +29,7 @@ impl<'a> Into<Packet> for Frame<'a> {
             F::Pong(x) => P::Pong(x.to_owned()),
             F::Text(x) => P::Text(x.to_owned()),
             F::Binary(x) => P::Binary(x.to_owned()),
+            F::Close(c, t) => P::Close(c, t.to_owned()),
         }
     }
 }
@@ -40,6 +43,7 @@ impl<'a> Into<Packet> for &'a Frame<'a> {
             F::Pong(x) => P::Pong(x.to_owned()),
             F::Text(x) => P::Text(x.to_owned()),
             F::Binary(x) => P::Binary(x.to_owned()),
+            F::Close(c, t) => P::Close(c, t.to_owned()),
         }
     }
 }

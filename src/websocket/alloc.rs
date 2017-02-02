@@ -11,4 +11,6 @@ pub enum Packet {
     Text(String),
     /// Binary message
     Binary(Vec<u8>),
+    /// Close message
+    Close(u16, String),
 }

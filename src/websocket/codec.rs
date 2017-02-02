@@ -2,7 +2,7 @@ use std::io;
 use tk_bufstream::{Buf, Encode, Decode};
 
 use super::{Packet};
-use super::zero_copy::{parse_frame, write_packet};
+use super::zero_copy::{parse_frame, write_packet, write_close};
 
 
 const MAX_PACKET_SIZE: usize = 10 << 20;
@@ -23,6 +23,8 @@ impl Encode for Codec {
             Pong(data) => write_packet(buf, 0xA, &data),
             Text(data) => write_packet(buf, 0x1, data.as_bytes()),
             Binary(data) => write_packet(buf, 0x2, &data),
+            // TODO(tailhook) should we also change state somehow?
+            Close(c, t) => write_close(buf, c, &t),
         }
     }
 }

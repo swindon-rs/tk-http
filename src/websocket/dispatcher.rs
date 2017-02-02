@@ -2,13 +2,14 @@ use std::fmt;
 use std::sync::Arc;
 
 use futures::{Future, Async, Stream};
-use futures::stream::Fuse;
+use futures::future::{FutureResult, ok};
+use futures::stream;
 use tokio_core::io::Io;
 use tk_bufstream::{ReadFramed, WriteFramed, ReadBuf, WriteBuf};
 use tk_bufstream::{Encode};
 
 use websocket::{Frame, Config, Codec, Packet, Error};
-use websocket::zero_copy::parse_frame;
+use websocket::zero_copy::{parse_frame, write_packet, write_close};
 
 
 /// Dispatches messages received from websocket
@@ -34,9 +35,24 @@ pub struct Loop<S: Io, T, D: Dispatcher> {
     config: Arc<Config>,
     input: ReadBuf<S>,
     output: WriteBuf<S>,
-    stream: Fuse<T>,
+    stream: Option<T>,
     dispatcher: D,
     backpressure: Option<D::Future>,
+    state: LoopState,
+}
+
+
+/// A special kind of dispatcher that consumes all messages and does nothing
+///
+/// This is used with `Loop::closing()`.
+pub struct BlackHole;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LoopState {
+    Open,
+    CloseSent,
+    CloseReceived,
+    Done,
 }
 
 // TODO(tailhook) Stream::Error should be Void here
@@ -55,9 +71,45 @@ impl<S: Io, T, D, E> Loop<S, T, D>
             config: config.clone(),
             input: inp.into_inner(),
             output: outp.into_inner(),
-            stream: stream.fuse(),
+            stream: Some(stream),
             dispatcher: dispatcher,
             backpressure: None,
+            state: LoopState::Open,
+        }
+    }
+}
+
+impl<S: Io, E> Loop<S, stream::Empty<Packet, E>, BlackHole>
+{
+    /// A websocket loop that sends failure and waits for closing handshake
+    ///
+    /// This method should be called instead of `new` if something wrong
+    /// happened with handshake.
+    ///
+    /// The motivation of such constructor is: browsers do not propagate
+    /// http error codes when websocket is established. This is presumed as
+    /// a security feature (so you can't attack server that doesn't support
+    /// websockets).
+    ///
+    /// So to show useful failure to websocket code we return `101 Switching
+    /// Protocol` response code (which is success). I.e. establish a websocket
+    /// connection, then immediately close it with a reason code and text.
+    /// Javascript client can fetch the failure reason from `onclose` callback.
+    pub fn closing(outp: WriteFramed<S, Codec>, inp: ReadFramed<S, Codec>,
+        reason: u16, text: &str,
+        config: &Arc<Config>)
+        -> Loop<S, stream::Empty<Packet, E>, BlackHole>
+    {
+        let mut out = outp.into_inner();
+        write_close(&mut out.out_buf, reason, text);
+        Loop {
+            config: config.clone(),
+            input: inp.into_inner(),
+            output: out,
+            stream: None,
+            dispatcher: BlackHole,
+            backpressure: None,
+            state: LoopState::CloseSent,
         }
     }
 }
@@ -67,17 +119,42 @@ impl<S: Io, T, D, E> Loop<S, T, D>
           D: Dispatcher,
 {
     fn read_stream(&mut self) -> Result<(), E> {
+        if self.state == LoopState::CloseSent {
+            return Ok(());
+        }
         // For now we assume that there is no useful backpressure can
         // be applied to a stream, so we read everything from the stream
         // and put it into a buffer
-        while let Async::Ready(value) = self.stream.poll()? {
-            match value {
-                Some(pkt) => {
-                    Codec.encode(pkt, &mut self.output.out_buf);
+        if let Some(ref mut stream) = self.stream {
+            loop {
+                match stream.poll()? {
+                    Async::Ready(value) => match value {
+                        Some(pkt) => {
+                            Codec.encode(pkt, &mut self.output.out_buf);
+                        }
+                        None => {
+                            match self.state {
+                                LoopState::Open => {
+                                    // send close
+                                    write_close(&mut self.output.out_buf,
+                                                1000, "");
+                                    self.state = LoopState::CloseSent;
+                                }
+                                LoopState::CloseReceived => {
+                                    self.state = LoopState::Done;
+                                }
+                                _ => {}
+                            }
+                            break;
+                        }
+                    },
+                    Async::NotReady => {
+                        return Ok(());
+                    }
                 }
-                None => break,
             }
         }
+        self.stream = None;
         Ok(())
     }
 }
@@ -94,6 +171,9 @@ impl<S: Io, T, D, E> Future for Loop<S, T, D>
         self.read_stream()
             .map_err(|e| error!("Can't read from stream: {}", e)).ok();
         self.output.flush()?;
+        if self.state == LoopState::Done {
+            return Ok(Async::Ready(()));
+        }
 
         if let Some(mut back) = self.backpressure.take() {
             match back.poll()? {
@@ -107,21 +187,48 @@ impl<S: Io, T, D, E> Future for Loop<S, T, D>
 
         loop {
             while self.input.in_buf.len() > 0 {
-                let (mut fut, nbytes) = match
+                let (fut, nbytes) = match
                     parse_frame(&mut self.input.in_buf,
                                 self.config.max_packet_size)?
                 {
                     Some((frame, nbytes)) => {
-                        (self.dispatcher.frame(&frame), nbytes)
+                        let fut = match frame {
+                            Frame::Ping(data) => {
+                                trace!("Received ping {:?}", data);
+                                write_packet(&mut self.output.out_buf,
+                                             0xA, data);
+                                None
+                            }
+                            Frame::Pong(data) => {
+                                trace!("Received pong {:?}", data);
+                                None
+                            }
+                            Frame::Close(code, reply) => {
+                                debug!("Websocket closed by peer [{}]{:?}",
+                                    code, reply);
+                                self.state = LoopState::CloseReceived;
+                                Some(self.dispatcher.frame(
+                                    &Frame::Close(code, reply)))
+                            }
+                            pkt @ Frame::Text(_) | pkt @ Frame::Binary(_) => {
+                                Some(self.dispatcher.frame(&pkt))
+                            }
+                        };
+                        (fut, nbytes)
                     }
                     None => break,
                 };
                 self.input.in_buf.consume(nbytes);
-                match fut.poll()? {
-                    Async::Ready(()) => {},
-                    Async::NotReady => {
-                        self.backpressure = Some(fut);
-                        return Ok(Async::NotReady)
+                if self.state == LoopState::Done {
+                    return Ok(Async::Ready(()));
+                }
+                if let Some(mut fut) = fut {
+                    match fut.poll()? {
+                        Async::Ready(()) => {},
+                        Async::NotReady => {
+                            self.backpressure = Some(fut);
+                            return Ok(Async::NotReady);
+                        }
                     }
                 }
             }
@@ -136,5 +243,12 @@ impl<S: Io, T, D, E> Future for Loop<S, T, D>
                 _ => continue,
             }
         }
+    }
+}
+
+impl Dispatcher for BlackHole {
+    type Future = FutureResult<(), Error>;
+    fn frame(&mut self, _frame: &Frame) -> Self::Future {
+        ok(())
     }
 }
