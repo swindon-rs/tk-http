@@ -79,7 +79,7 @@ impl<S: Io, T, D, E> Loop<S, T, D>
     }
 }
 
-impl<S: Io, E> Loop<S, stream::Empty<Packet, E>, BlackHole>
+impl<S: Io> Loop<S, stream::Empty<Packet, ()>, BlackHole>
 {
     /// A websocket loop that sends failure and waits for closing handshake
     ///
@@ -98,7 +98,7 @@ impl<S: Io, E> Loop<S, stream::Empty<Packet, E>, BlackHole>
     pub fn closing(outp: WriteFramed<S, Codec>, inp: ReadFramed<S, Codec>,
         reason: u16, text: &str,
         config: &Arc<Config>)
-        -> Loop<S, stream::Empty<Packet, E>, BlackHole>
+        -> Loop<S, stream::Empty<Packet, ()>, BlackHole>
     {
         let mut out = outp.into_inner();
         write_close(&mut out.out_buf, reason, text);
