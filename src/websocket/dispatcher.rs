@@ -47,6 +47,11 @@ pub struct Loop<S: Io, T, D: Dispatcher> {
 /// This is used with `Loop::closing()`.
 pub struct BlackHole;
 
+/// A displayable stream error that never happens
+///
+/// This is used with `Loop::closing()`.
+pub struct VoidError;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LoopState {
     Open,
@@ -79,7 +84,7 @@ impl<S: Io, T, D, E> Loop<S, T, D>
     }
 }
 
-impl<S: Io> Loop<S, stream::Empty<Packet, ()>, BlackHole>
+impl<S: Io> Loop<S, stream::Empty<Packet, VoidError>, BlackHole>
 {
     /// A websocket loop that sends failure and waits for closing handshake
     ///
@@ -98,7 +103,7 @@ impl<S: Io> Loop<S, stream::Empty<Packet, ()>, BlackHole>
     pub fn closing(outp: WriteFramed<S, Codec>, inp: ReadFramed<S, Codec>,
         reason: u16, text: &str,
         config: &Arc<Config>)
-        -> Loop<S, stream::Empty<Packet, ()>, BlackHole>
+        -> Loop<S, stream::Empty<Packet, VoidError>, BlackHole>
     {
         let mut out = outp.into_inner();
         write_close(&mut out.out_buf, reason, text);
@@ -250,5 +255,11 @@ impl Dispatcher for BlackHole {
     type Future = FutureResult<(), Error>;
     fn frame(&mut self, _frame: &Frame) -> Self::Future {
         ok(())
+    }
+}
+
+impl fmt::Display for VoidError {
+    fn fmt(&self, _: &mut fmt::Formatter) -> fmt::Result {
+        unreachable!();
     }
 }
