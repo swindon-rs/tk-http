@@ -10,12 +10,14 @@ mod alloc;
 mod codec;
 mod dispatcher;
 mod config;
+//mod client;
 
 pub use self::error::Error;
 pub use self::zero_copy::Frame;
 pub use self::alloc::Packet;
 pub use self::codec::Codec;
 pub use self::dispatcher::{Loop, Dispatcher};
+//pub use self::client::Client;
 
 
 /// Configuration of a `websocket::Loop` object (a server-side websocket
