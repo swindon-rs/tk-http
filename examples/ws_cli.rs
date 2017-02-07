@@ -14,6 +14,19 @@ use std::net::ToSocketAddrs;
 
 use futures::Future;
 use tokio_core::net::TcpStream;
+use minihttp::websocket::Loop;
+use minihttp::websocket::client::{HandshakeProto, SimpleAuthorizer};
+
+
+/*
+impl Dispatcher for Echo {
+    type Future = FutureResult<(), WsErr>;
+    fn frame(&mut self, frame: &Frame) -> FutureResult<(), WsErr> {
+        self.0.start_send(frame.into()).unwrap();
+        ok(())
+    }
+}
+*/
 
 
 pub fn main() {
@@ -27,10 +40,18 @@ pub fn main() {
     let addr = ("echo.websocket.org", 80).to_socket_addrs()
         .expect("resolve address").next().expect("at least one IP");
 
-    let response = lp.run(futures::lazy(move || {
+    lp.run(futures::lazy(move || {
         TcpStream::connect(&addr, &handle)
+        .map_err(|e| e.into())
         .and_then(|sock| {
-            println!("Socket {:?}", sock);
+            HandshakeProto::new(sock, SimpleAuthorizer::new("/"))
+        })
+        .and_then(|(out, inp, ())| {
+            println!("Connected");
+            /*
+            Loop::new(out, inp, rx, Echo, &wcfg)
+            .map_err(|e| println!("websocket closed: {}", e))
+            */
             Ok(())
         })
     })).expect("request failed");

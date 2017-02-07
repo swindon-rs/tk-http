@@ -67,6 +67,14 @@ pub struct SimpleAuthorizer {
     path: String,
 }
 
+impl SimpleAuthorizer {
+    pub fn new<P: Into<String>>(path: P) -> SimpleAuthorizer {
+        SimpleAuthorizer {
+            path: path.into()
+        }
+    }
+}
+
 impl<S: Io> Authorizer<S> for SimpleAuthorizer {
     type Result = ();
     fn write_headers(&mut self, mut e: Encoder<S>) -> EncoderDone<S> {

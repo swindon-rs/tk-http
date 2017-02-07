@@ -10,7 +10,7 @@ mod alloc;
 mod codec;
 mod dispatcher;
 mod config;
-mod client;
+pub mod client;
 
 pub use self::error::Error;
 pub use self::zero_copy::Frame;
