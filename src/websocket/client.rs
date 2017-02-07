@@ -30,6 +30,58 @@ pub struct EncoderDone<S: Io> {
     buf: WriteBuf<S>,
 }
 
+/// Authorizer sends all the necessary headers and checks response headers
+/// to establish websocket connection
+///
+/// The `SimpleAuthorizer` implementation is good enough for most cases, but
+/// custom authorizer may be helpful for `Cookie` or `Authorization` header.
+pub trait Authorizer<S: Io> {
+    /// The type that may be returned from a `header_received`. It should
+    /// encompass everything parsed from input headers.
+    type Result: Sized;
+    /// Write request headers
+    ///
+    /// Websocket-specific headers like `Connection`, `Upgrade`, and
+    /// `Sec-Websocket-Key` are written automatically. But optional things
+    /// like `User-Agent` must be written by this method, as well as
+    /// path encoded in request-line.
+    fn write_headers(&mut self, e: Encoder<S>) -> EncoderDone<S>;
+    /// A handler of response headers
+    ///
+    /// It's called when websocket has been sucessfully connected or when
+    /// server returned error, check that response code equals 101 to make
+    /// sure response is established.
+    ///
+    /// Anyway, handler may be skipped in case of invalid response headers.
+    fn headers_received(&mut self, headers: &Head)
+        -> Result<Self::Result, Error>;
+}
+
+pub struct HandshakeProto<S, A> {
+    transport: S,
+    authorizer: A,
+}
+
+
+pub struct SimpleAuthorizer {
+    path: String,
+}
+
+impl<S: Io> Authorizer<S> for SimpleAuthorizer {
+    type Result = ();
+    fn write_headers(&mut self, mut e: Encoder<S>) -> EncoderDone<S> {
+        e.request_line(&self.path);
+        e.add_header("User-Agent", concat!("minihttp/",
+            env!("CARGO_PKG_VERSION"))).unwrap();
+        e.done()
+    }
+    fn headers_received(&mut self, headers: &Head)
+        -> Result<Self::Result, Error>
+    {
+        Ok(())
+    }
+}
+
 fn check_header(name: &str) {
     if name.eq_ignore_ascii_case("Connection") ||
         name.eq_ignore_ascii_case("Upgrade") ||
@@ -100,41 +152,21 @@ impl<S: Io> Encoder<S> {
     /// Panics when the request is in a wrong state.
     pub fn done(mut self) -> EncoderDone<S> {
         self.message.done_headers(&mut self.buf.out_buf)
-            .map(|never_support_body| assert!(!never_support_body));
+            .map(|never_support_body| assert!(!never_support_body)).unwrap();
         self.message.done(&mut self.buf.out_buf);
         EncoderDone { buf: self.buf }
     }
 }
 
-fn encoder<S: Io>(io: WriteBuf<S>,
-    state: Arc<AtomicUsize>, close_signal: Arc<AtomicBool>)
-    -> Encoder<S>
-{
+fn encoder<S: Io>(io: WriteBuf<S>) -> Encoder<S> {
     Encoder {
         message: MessageState::RequestStart,
         buf: io,
     }
 }
 
-pub trait Authorizer<S: Io> {
-    type Result: Sized;
-    fn write_headers(&mut self, e: Encoder<S>) -> EncoderDone<S> {
-        unimplemented!();
-    }
-    fn headers_received(&mut self, headers: &Head)
-        -> Result<Self::Result, Error>
-    {
-        unimplemented!();
-    }
-}
-
-pub struct HandshakeProto<S, A> {
-    transport: S,
-    authorizer: A,
-}
-
 impl<S, A> HandshakeProto<S, A> {
-    fn new(transport: S, authorizer: A) -> HandshakeProto<S, A> {
+    pub fn new(transport: S, authorizer: A) -> HandshakeProto<S, A> {
         HandshakeProto {
             authorizer: authorizer,
             transport: transport,
