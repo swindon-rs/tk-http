@@ -1,19 +1,29 @@
 use std::ascii::AsciiExt;
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::io;
+use std::slice::Iter as SliceIter;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 
 use futures::{Future, Async};
-use tk_bufstream::{WriteBuf, WriteFramed, ReadFramed};
+use httparse::{self, Header};
+use tk_bufstream::{IoBuf, ReadBuf, WriteBuf, WriteFramed, ReadFramed};
 use tokio_core::io::Io;
 
 use base_serializer::{MessageState, HeaderError};
 // TODO(tailhook) change the error
-use client::{Head, Error};
-use enums::Version;
+use client::{Error};
+use enums::{Version, Status};
 use headers::is_close;
 use websocket::Codec as WebsocketCodec;
+
+
+
+/// Number of headers to allocate on a stack
+const MIN_HEADERS: usize = 16;
+/// A hard limit on the number of headers
+const MAX_HEADERS: usize = 1024;
 
 /// This a request writer that you receive in `Codec`
 ///
@@ -57,8 +67,22 @@ pub trait Authorizer<S: Io> {
         -> Result<Self::Result, Error>;
 }
 
+/// A borrowed structure that represents response headers
+///
+/// It's passed to `Authorizer::headers_received` and you are
+/// free to store or discard any needed fields and headers from it.
+///
+#[derive(Debug)]
+pub struct Head<'a> {
+    version: Version,
+    code: u16,
+    reason: &'a str,
+    headers: &'a [Header<'a>],
+}
+
 pub struct HandshakeProto<S, A> {
-    transport: S,
+    input: Option<ReadBuf<S>>,
+    output: Option<WriteBuf<S>>,
     authorizer: A,
 }
 
@@ -160,7 +184,7 @@ impl<S: Io> Encoder<S> {
     /// Panics when the request is in a wrong state.
     pub fn done(mut self) -> EncoderDone<S> {
         self.message.done_headers(&mut self.buf.out_buf)
-            .map(|never_support_body| assert!(!never_support_body)).unwrap();
+            .map(|ignore_body| assert!(ignore_body)).unwrap();
         self.message.done(&mut self.buf.out_buf);
         EncoderDone { buf: self.buf }
     }
@@ -173,12 +197,55 @@ fn encoder<S: Io>(io: WriteBuf<S>) -> Encoder<S> {
     }
 }
 
-impl<S, A> HandshakeProto<S, A> {
-    pub fn new(transport: S, authorizer: A) -> HandshakeProto<S, A> {
+impl<S: Io, A: Authorizer<S>> HandshakeProto<S, A> {
+    pub fn new(transport: S, mut authorizer: A) -> HandshakeProto<S, A> {
+        let (tx, rx) = IoBuf::new(transport).split();
+        let out = authorizer.write_headers(encoder(tx)).buf;
         HandshakeProto {
             authorizer: authorizer,
-            transport: transport,
+            input: Some(rx),
+            output: Some(out),
         }
+    }
+    fn parse_headers(&mut self) -> Result<Option<A::Result>, Error> {
+        let ref mut buf = self.input.as_mut()
+            .expect("buffer still exists")
+            .in_buf;
+        let (res, bytes) = {
+            let mut vec;
+            let mut headers = [httparse::EMPTY_HEADER; MIN_HEADERS];
+            let (code, reason, headers, bytes) = {
+                let mut raw = httparse::Response::new(&mut headers);
+                let mut result = raw.parse(&buf[..]);
+                if matches!(result, Err(httparse::Error::TooManyHeaders)) {
+                    vec = vec![httparse::EMPTY_HEADER; MAX_HEADERS];
+                    raw = httparse::Response::new(&mut vec);
+                    result = raw.parse(&buf[..]);
+                }
+                match result? {
+                    httparse::Status::Complete(bytes) => {
+                        let ver = raw.version.unwrap();
+                        if ver != 1 {
+                            //return Error::VersionTooOld;
+                            unimplemented!();
+                        }
+                        let code = raw.code.unwrap();
+                        (code, raw.reason.unwrap(), raw.headers, bytes)
+                    }
+                    _ => return Ok(None),
+                }
+            };
+            let head = Head {
+                version: Version::Http11,
+                code: code,
+                reason: reason,
+                headers: headers,
+            };
+            let data = self.authorizer.headers_received(&head)?;
+            (data, bytes)
+        };
+        buf.consume(bytes);
+        return Ok(Some(res));
     }
 }
 
@@ -189,6 +256,59 @@ impl<S: Io, A> Future for HandshakeProto<S, A>
                  A::Result);
     type Error = Error;
     fn poll(&mut self) -> Result<Async<Self::Item>, Error> {
-        unimplemented!();
+        self.output.as_mut().expect("poll after complete").flush()?;
+        self.input.as_mut().expect("poll after complete").read()?;
+        if self.input.as_mut().expect("poll after complete").done() {
+            return Err(Error::PrematureResponseHeaders);
+        }
+        match self.parse_headers()? {
+            Some(x) => {
+                let inp = self.input.take()
+                    .expect("input still here")
+                    .framed(WebsocketCodec);
+                let out = self.output.take()
+                    .expect("input still here")
+                    .framed(WebsocketCodec);
+                Ok(Async::Ready((out, inp, x)))
+            }
+            None => Ok(Async::NotReady),
+        }
+    }
+}
+
+/// Iterator over all meaningful headers for the response
+///
+/// This iterator is created by `Head::headers`. And iterates over all
+/// headers except hop-by-hop ones.
+///
+/// Note: duplicate headers are not glued together neither they are sorted
+pub struct HeaderIter<'a> {
+    head: &'a Head<'a>,
+    iter: SliceIter<'a, Header<'a>>,
+}
+
+impl<'a> Head<'a> {
+    /// Returns status if it is one of the supported statuses otherwise None
+    ///
+    /// Note: this method does not consider "reason" string at all just
+    /// status code. Which is fine as specification states.
+    pub fn status(&self) -> Option<Status> {
+        Status::from(self.code)
+    }
+    /// Returns raw status code and reason as received even
+    ///
+    /// This returns something even if `status()` returned `None`.
+    ///
+    /// Note: the reason string may not match the status code or may even be
+    /// an empty string.
+    pub fn raw_status(&self) -> (u16, &'a str) {
+        (self.code, self.reason)
+    }
+    /// All headers of HTTP request
+    ///
+    /// Unlike `self.headers()` this does include hop-by-hop headers. This
+    /// method is here just for completeness, you shouldn't need it.
+    pub fn all_headers(&self) -> &'a [Header<'a>] {
+        self.headers
     }
 }
