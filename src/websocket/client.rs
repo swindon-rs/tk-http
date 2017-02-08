@@ -52,9 +52,9 @@ pub trait Authorizer<S: Io> {
     /// Write request headers
     ///
     /// Websocket-specific headers like `Connection`, `Upgrade`, and
-    /// `Sec-Websocket-Key` are written automatically. But optional things
-    /// like `User-Agent` must be written by this method, as well as
-    /// path encoded in request-line.
+    /// `Sec-Websocket-Key` are written automatically. But other important
+    /// things like `Host`, `Origin`, `User-Agent` must be written by
+    /// this method, as well as path encoded in request-line.
     fn write_headers(&mut self, e: Encoder<S>) -> EncoderDone<S>;
     /// A handler of response headers
     ///
@@ -88,12 +88,17 @@ pub struct HandshakeProto<S, A> {
 
 
 pub struct SimpleAuthorizer {
+    host: String,
     path: String,
 }
 
 impl SimpleAuthorizer {
-    pub fn new<P: Into<String>>(path: P) -> SimpleAuthorizer {
+    pub fn new<A, B>(host: A, path: B) -> SimpleAuthorizer
+        where A: Into<String>,
+              B: Into<String>,
+    {
         SimpleAuthorizer {
+            host: host.into(),
             path: path.into()
         }
     }
@@ -103,6 +108,10 @@ impl<S: Io> Authorizer<S> for SimpleAuthorizer {
     type Result = ();
     fn write_headers(&mut self, mut e: Encoder<S>) -> EncoderDone<S> {
         e.request_line(&self.path);
+        e.add_header("Host", &self.host).unwrap();
+        e.format_header("Origin",
+            format_args!("http://{}{}", self.host, self.path))
+            .unwrap();
         e.add_header("User-Agent", concat!("minihttp/",
             env!("CARGO_PKG_VERSION"))).unwrap();
         e.done()
@@ -119,7 +128,7 @@ fn check_header(name: &str) {
         name.eq_ignore_ascii_case("Upgrade") ||
         name.eq_ignore_ascii_case("Sec-Websocket-Key")
     {
-        panic!("You shouldn'set connection header yourself");
+        panic!("You shouldn't set websocket specific headers yourself");
     }
 }
 
@@ -183,6 +192,15 @@ impl<S: Io> Encoder<S> {
     ///
     /// Panics when the request is in a wrong state.
     pub fn done(mut self) -> EncoderDone<S> {
+        self.message.add_header(&mut self.buf.out_buf,
+            "Connection", b"upgrade");
+        self.message.add_header(&mut self.buf.out_buf,
+            "Upgrade", b"websocket");
+        // TODO(tailhook) generate real random key
+        self.message.add_header(&mut self.buf.out_buf,
+            "Sec-WebSocket-Key", b"x3JJHMbDL1EzLkh9GBhXDw==");
+        self.message.add_header(&mut self.buf.out_buf,
+            "Sec-WebSocket-Version", b"13");
         self.message.done_headers(&mut self.buf.out_buf)
             .map(|ignore_body| assert!(ignore_body)).unwrap();
         self.message.done(&mut self.buf.out_buf);

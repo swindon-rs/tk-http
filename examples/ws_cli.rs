@@ -44,7 +44,8 @@ pub fn main() {
         TcpStream::connect(&addr, &handle)
         .map_err(|e| e.into())
         .and_then(|sock| {
-            HandshakeProto::new(sock, SimpleAuthorizer::new("/"))
+            HandshakeProto::new(sock, SimpleAuthorizer::new(
+                "echo.websocket.org", "/"))
         })
         .and_then(|(out, inp, ())| {
             println!("Connected");
