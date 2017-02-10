@@ -8,11 +8,13 @@ mod encoder;
 mod request_target;
 mod headers;
 mod websocket;
+mod recv_mode;
 pub mod buffered;
 
 pub use self::error::Error;
 pub use self::encoder::{Encoder, EncoderDone, FutureRawBody, RawBody};
-pub use self::codec::{Codec, Dispatcher, RecvMode};
+pub use self::codec::{Codec, Dispatcher};
+pub use self::recv_mode::RecvMode;
 pub use self::proto::Proto;
 pub use self::headers::{Head, HeaderIter};
 pub use self::request_target::RequestTarget;
