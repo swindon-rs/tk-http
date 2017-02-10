@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 /// This type is returned from `headers_received` handler of either
 /// client client or server protocol handler
 ///
@@ -13,6 +15,7 @@
 #[derive(Debug, Clone)]
 pub struct RecvMode {
     mode: Mode,
+    timeout: Option<Duration>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +37,7 @@ impl RecvMode {
     pub fn buffered_upfront(max_body_size: usize) -> RecvMode {
         RecvMode {
             mode: Mode::BufferedUpfront(max_body_size),
+            timeout: None,
         }
     }
     /// Fetch data chunk-by-chunk.
@@ -52,6 +56,7 @@ impl RecvMode {
     pub fn progressive(min_chunk_size_hint: usize) -> RecvMode {
         RecvMode {
             mode: Mode::Progressive(min_chunk_size_hint),
+            timeout: None,
         }
     }
     /// Don't read request body and hijack connection after response headers
@@ -61,7 +66,20 @@ impl RecvMode {
     /// Note: `data_received` method of Codec is never called for `Hijack`d
     /// connection.
     pub fn hijack() -> RecvMode {
-        RecvMode { mode: Mode::Hijack }
+        RecvMode { mode: Mode::Hijack, timeout: None }
+    }
+
+    /// Change timeout for reading the whole request body to this value
+    /// instead of configured default
+    ///
+    /// This might be useful if you have some specific slow routes and you
+    /// can authenticate that request is valid enough. This is also useful for
+    /// streaming large bodies and similar things.
+    ///
+    /// Or vice versa if you what shorter timeouts for suspicious host.
+    pub fn body_read_timeout(mut self, duration: Duration) -> RecvMode {
+        self.timeout = Some(duration);
+        self
     }
 }
 

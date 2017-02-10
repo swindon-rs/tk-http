@@ -1,3 +1,4 @@
+use std::time::Duration;
 use std::sync::Arc;
 
 use server::{Config};
@@ -8,6 +9,13 @@ impl Config {
         Config {
             inflight_request_limit: 2,
             inflight_request_prealloc: 0,
+            first_byte_timeout: Duration::new(5, 0),
+            keep_alive_timeout: Duration::new(90, 0),
+            headers_timeout: Duration::new(10, 0),
+            input_body_byte_timeout: Duration::new(15, 0),
+            input_body_whole_timeout: Duration::new(3600, 0),
+            output_body_byte_timeout: Duration::new(15, 0),
+            output_body_whole_timeout: Duration::new(300, 0),
         }
     }
     /// A number of inflight requests until we stop reading more requests
