@@ -7,9 +7,10 @@ use tk_bufstream::{IoBuf, WriteBuf, ReadBuf};
 use tokio_core::io::Io;
 
 use super::encoder::{self, get_inner, ResponseConfig};
-use super::{Dispatcher, Codec, Error, Config, RecvMode};
+use super::{Dispatcher, Codec, Error, Config};
 use super::headers::parse_headers;
 use super::codec::BodyKind;
+use server::recv_mode::{Mode, get_mode};
 use chunked;
 use body_parser::BodyProgress;
 
@@ -22,7 +23,7 @@ enum OutState<S: Io, F, C> {
 }
 
 struct BodyState<C> {
-    mode: RecvMode,
+    mode: Mode,
     progress: BodyProgress,
     response_config: ResponseConfig,
     codec: C,
@@ -45,11 +46,11 @@ pub struct Proto<S: Io, D: Dispatcher<S>> {
     config: Arc<Config>,
 }
 
-fn new_body(mode: BodyKind, recv_mode: RecvMode)
+fn new_body(mode: BodyKind, recv_mode: Mode)
     -> Result<BodyProgress, Error>
 {
     use super::codec::BodyKind as B;
-    use super::RecvMode as M;
+    use super::recv_mode::Mode as M;
     use body_parser::BodyProgress as P;
     match (mode, recv_mode) {
         // TODO(tailhook) check size < usize
@@ -110,14 +111,14 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                         Some((body, mut codec, cfg)) => {
                             changed = true;
                             let mode = codec.recv_mode();
-                            if mode == RecvMode::Hijack {
+                            if get_mode(&mode) == Mode::Hijack {
                                 self.waiting.push_back((cfg, codec));
                                 (Hijack, true)
                             } else {
                                 (Body(BodyState {
-                                    mode: mode,
+                                    mode: get_mode(&mode),
                                     response_config: cfg,
-                                    progress: new_body(body, mode)?,
+                                    progress: new_body(body, get_mode(&mode))?,
                                     codec: codec }),
                                  true)
                             }
@@ -133,7 +134,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                             &inbuf.in_buf[..bytes], true)?)
                     } else if inbuf.done() {
                         return Err(Error::ConnectionReset);
-                    } else if matches!(body.mode, RecvMode::Progressive(x) if x <= bytes) {
+                    } else if matches!(body.mode, Mode::Progressive(x) if x <= bytes) {
                         Some(body.codec.data_received(
                             &inbuf.in_buf[..bytes], false)?)
                     } else {
@@ -152,7 +153,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                             }
                         }
                         Some(Async::NotReady) => {
-                            if matches!(body.mode, RecvMode::Progressive(x) if x > bytes) {
+                            if matches!(body.mode, Mode::Progressive(x) if x > bytes) {
                                 (Body(body), false)
                             } else {
                                 (Body(body), true) // TODO(tailhook) check
@@ -174,7 +175,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
     fn do_writes(&mut self) -> Result<(), Error> {
         use self::OutState::*;
         use self::InState::*;
-        use server::RecvMode::{BufferedUpfront, Progressive};
+        use server::recv_mode::Mode::{BufferedUpfront, Progressive};
         loop {
             let (next, cont) = match mem::replace(&mut self.writing, Void) {
                 Idle(mut io) => {
@@ -193,7 +194,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                             => {
                                 (Idle(io), false)
                             }
-                            Body(BodyState { mode: RecvMode::Hijack, ..}) => {
+                            Body(BodyState { mode: Mode::Hijack, ..}) => {
                                 unreachable!();
                             }
                             Body(BodyState {

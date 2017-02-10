@@ -274,9 +274,9 @@ impl<S: Io, R: Service<S>> Codec<S> for BufferedCodec<R> {
     type ResponseFuture = R::Future;
     fn recv_mode(&mut self) -> RecvMode {
         if self.request.as_ref().unwrap().websocket_handshake.is_some() {
-            RecvMode::Hijack
+            RecvMode::hijack()
         } else {
-            RecvMode::BufferedUpfront(self.max_request_length)
+            RecvMode::buffered_upfront(self.max_request_length)
         }
     }
     fn data_received(&mut self, data: &[u8], end: bool)
