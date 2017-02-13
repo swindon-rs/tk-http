@@ -12,21 +12,24 @@ use std::path::{PathBuf, Path};
 use std::str::FromStr;
 use std::net::ToSocketAddrs;
 
-use futures::Future;
+use futures::{Future, Stream};
+use futures::future::{FutureResult, ok};
+use futures::sync::mpsc::channel;
 use tokio_core::net::TcpStream;
-use minihttp::websocket::Loop;
+use minihttp::websocket::{Loop, Frame, Error, Dispatcher, Config};
 use minihttp::websocket::client::{HandshakeProto, SimpleAuthorizer};
 
+struct Echo;
 
-/*
+
 impl Dispatcher for Echo {
-    type Future = FutureResult<(), WsErr>;
-    fn frame(&mut self, frame: &Frame) -> FutureResult<(), WsErr> {
-        self.0.start_send(frame.into()).unwrap();
+    type Future = FutureResult<(), Error>;
+    fn frame(&mut self, frame: &Frame) -> FutureResult<(), Error> {
+        //self.0.start_send(frame.into()).unwrap();
+        println!("Frame");
         ok(())
     }
 }
-*/
 
 
 pub fn main() {
@@ -39,21 +42,23 @@ pub fn main() {
     let handle = lp.handle();
     let addr = ("echo.websocket.org", 80).to_socket_addrs()
         .expect("resolve address").next().expect("at least one IP");
+    let wcfg = Config::new().done();
 
     lp.run(futures::lazy(move || {
         TcpStream::connect(&addr, &handle)
-        .map_err(|e| e.into())
+        .map_err(|e| error!("Error {}", e))
         .and_then(|sock| {
             HandshakeProto::new(sock, SimpleAuthorizer::new(
                 "echo.websocket.org", "/"))
+            .map_err(|e| error!("Error {}", e))
         })
-        .and_then(|(out, inp, ())| {
+        .and_then(move |(out, inp, ())| {
             println!("Connected");
-            /*
+            let (tx, rx) = channel(1);
+            let rx = rx.map_err(|_| format!("stream closed"));
             Loop::new(out, inp, rx, Echo, &wcfg)
             .map_err(|e| println!("websocket closed: {}", e))
-            */
-            Ok(())
         })
+        .then(|_| -> Result<(), &'static str> { Ok(()) })
     })).expect("request failed");
 }
