@@ -66,6 +66,7 @@ struct Echo(UnboundedSender<Packet>);
 impl Dispatcher for Echo {
     type Future = FutureResult<(), WsErr>;
     fn frame(&mut self, frame: &Frame) -> FutureResult<(), WsErr> {
+        println!("Received frame: {:?}. Echoing...", frame);
         self.0.start_send(frame.into()).unwrap();
         ok(())
     }
@@ -106,7 +107,7 @@ fn main() {
                             })
                             .then(|_| Ok(())));
                         let rx = rx.map_err(|_| format!("stream closed"));
-                        Loop::new(out, inp, rx, Echo(tx), &wcfg)
+                        Loop::server(out, inp, rx, Echo(tx), &wcfg)
                         .map_err(|e| println!("websocket closed: {}", e))
                     }))
             .map_err(|e| { println!("Connection error: {}", e); })

@@ -10,7 +10,7 @@ use tokio_core::io::Io;
 use tokio_core::reactor::Handle;
 use tk_bufstream::{ReadBuf, WriteBuf, ReadFramed, WriteFramed};
 
-use websocket::{Codec as WebsocketCodec};
+use websocket::{ServerCodec as WebsocketCodec};
 use super::{Error, Encoder, EncoderDone, Dispatcher, Codec, Head, RecvMode};
 use super::{WebsocketHandshake};
 use {Version};

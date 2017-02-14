@@ -8,7 +8,7 @@ use tokio_core::io::Io;
 use tk_bufstream::{ReadFramed, WriteFramed, ReadBuf, WriteBuf};
 use tk_bufstream::{Encode};
 
-use websocket::{Frame, Config, Codec, Packet, Error};
+use websocket::{Frame, Config, Packet, Error, ServerCodec, ClientCodec};
 use websocket::zero_copy::{parse_frame, write_packet, write_close};
 
 
@@ -39,6 +39,7 @@ pub struct Loop<S: Io, T, D: Dispatcher> {
     dispatcher: D,
     backpressure: Option<D::Future>,
     state: LoopState,
+    server: bool,
 }
 
 
@@ -65,10 +66,12 @@ impl<S: Io, T, D, E> Loop<S, T, D>
     where T: Stream<Item=Packet, Error=E>,
           D: Dispatcher,
 {
-    /// Create a new websocket Loop
+    /// Create a new websocket Loop (server-side)
     ///
-    /// This method should be callec in `hijack` method of `server::Codec`
-    pub fn new(outp: WriteFramed<S, Codec>, inp: ReadFramed<S, Codec>,
+    /// This method should be called in `hijack` method of `server::Codec`
+    pub fn server(
+        outp: WriteFramed<S, ServerCodec>,
+        inp: ReadFramed<S, ServerCodec>,
         stream: T, dispatcher: D, config: &Arc<Config>)
         -> Loop<S, T, D>
     {
@@ -80,6 +83,27 @@ impl<S: Io, T, D, E> Loop<S, T, D>
             dispatcher: dispatcher,
             backpressure: None,
             state: LoopState::Open,
+            server: true,
+        }
+    }
+    /// Create a new websocket Loop (client-side)
+    ///
+    /// This method should be called after `HandshakeProto` finishes
+    pub fn client(
+        outp: WriteFramed<S, ClientCodec>,
+        inp: ReadFramed<S, ClientCodec>,
+        stream: T, dispatcher: D, config: &Arc<Config>)
+        -> Loop<S, T, D>
+    {
+        Loop {
+            config: config.clone(),
+            input: inp.into_inner(),
+            output: outp.into_inner(),
+            stream: Some(stream),
+            dispatcher: dispatcher,
+            backpressure: None,
+            state: LoopState::Open,
+            server: false,
         }
     }
 }
@@ -100,13 +124,15 @@ impl<S: Io> Loop<S, stream::Empty<Packet, VoidError>, BlackHole>
     /// Protocol` response code (which is success). I.e. establish a websocket
     /// connection, then immediately close it with a reason code and text.
     /// Javascript client can fetch the failure reason from `onclose` callback.
-    pub fn closing(outp: WriteFramed<S, Codec>, inp: ReadFramed<S, Codec>,
+    pub fn closing(
+        outp: WriteFramed<S, ServerCodec>,
+        inp: ReadFramed<S, ServerCodec>,
         reason: u16, text: &str,
         config: &Arc<Config>)
         -> Loop<S, stream::Empty<Packet, VoidError>, BlackHole>
     {
         let mut out = outp.into_inner();
-        write_close(&mut out.out_buf, reason, text);
+        write_close(&mut out.out_buf, reason, text, false);
         Loop {
             config: config.clone(),
             input: inp.into_inner(),
@@ -115,6 +141,8 @@ impl<S: Io> Loop<S, stream::Empty<Packet, VoidError>, BlackHole>
             dispatcher: BlackHole,
             backpressure: None,
             state: LoopState::CloseSent,
+            // TODO(tailhook) should we provide client-size thing?
+            server: true,
         }
     }
 }
@@ -135,14 +163,20 @@ impl<S: Io, T, D, E> Loop<S, T, D>
                 match stream.poll()? {
                     Async::Ready(value) => match value {
                         Some(pkt) => {
-                            Codec.encode(pkt, &mut self.output.out_buf);
+                            if self.server {
+                                ServerCodec.encode(pkt,
+                                    &mut self.output.out_buf);
+                            } else {
+                                ClientCodec.encode(pkt,
+                                    &mut self.output.out_buf);
+                            }
                         }
                         None => {
                             match self.state {
                                 LoopState::Open => {
                                     // send close
                                     write_close(&mut self.output.out_buf,
-                                                1000, "");
+                                                1000, "", !self.server);
                                     self.state = LoopState::CloseSent;
                                 }
                                 LoopState::CloseReceived => {
@@ -194,14 +228,14 @@ impl<S: Io, T, D, E> Future for Loop<S, T, D>
             while self.input.in_buf.len() > 0 {
                 let (fut, nbytes) = match
                     parse_frame(&mut self.input.in_buf,
-                                self.config.max_packet_size)?
+                                self.config.max_packet_size, self.server)?
                 {
                     Some((frame, nbytes)) => {
                         let fut = match frame {
                             Frame::Ping(data) => {
                                 trace!("Received ping {:?}", data);
                                 write_packet(&mut self.output.out_buf,
-                                             0xA, data);
+                                             0xA, data, !self.server);
                                 None
                             }
                             Frame::Pong(data) => {
