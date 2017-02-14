@@ -115,7 +115,6 @@ pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize, masked: bool)
 
 pub fn write_packet(buf: &mut Buf, opcode: u8, data: &[u8], mask: bool) {
     debug_assert!(opcode & 0xF0 == 0);
-    assert!(!mask); // TODO
     let first_byte = opcode | 0x80;  // always fin
     let mask_bit = if mask { 0x80 } else { 0 };
     match data.len() {
