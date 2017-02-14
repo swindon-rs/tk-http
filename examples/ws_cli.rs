@@ -24,7 +24,7 @@ struct Echo;
 impl Dispatcher for Echo {
     type Future = FutureResult<(), Error>;
     fn frame(&mut self, frame: &Frame) -> FutureResult<(), Error> {
-        println!("Frame");
+        println!("Frame arrived: {:?}", frame);
         ok(())
     }
 }

@@ -66,6 +66,7 @@ struct Echo(UnboundedSender<Packet>);
 impl Dispatcher for Echo {
     type Future = FutureResult<(), WsErr>;
     fn frame(&mut self, frame: &Frame) -> FutureResult<(), WsErr> {
+        println!("Received frame: {:?}. Echoing...", frame);
         self.0.start_send(frame.into()).unwrap();
         ok(())
     }

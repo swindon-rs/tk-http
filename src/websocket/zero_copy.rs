@@ -8,6 +8,7 @@ use super::{Error, Packet};
 
 
 /// A borrowed frame of websocket data
+#[derive(Debug, Clone)]
 pub enum Frame<'a> {
     /// Ping mesage
     Ping(&'a [u8]),

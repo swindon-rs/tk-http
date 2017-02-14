@@ -2,6 +2,7 @@
 ///
 /// Note: unlike `Frame` this has data allocated on the heap so has static
 /// lifetime
+#[derive(Debug, Clone)]
 pub enum Packet {
     /// Ping packet (with data)
     Ping(Vec<u8>),
