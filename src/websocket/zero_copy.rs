@@ -108,6 +108,7 @@ pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize, masked: bool)
         0x1 => Text(from_utf8(data)?),
         0x2 => Binary(data),
         // TODO(tailhook) implement shutdown packets
+        0x8 => Close(BigEndian::read_u16(&data[..2]), from_utf8(&data[2..])?),
         x => return Err(Error::InvalidOpcode(x)),
     };
     return Ok(Some((frame, start + size)));

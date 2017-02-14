@@ -24,12 +24,12 @@ impl Encode for ServerCodec {
     fn encode(&mut self, data: Packet, buf: &mut Buf) {
         use super::Packet::*;
         match data {
-            Ping(data) => write_packet(buf, 0x9, &data, true),
-            Pong(data) => write_packet(buf, 0xA, &data, true),
-            Text(data) => write_packet(buf, 0x1, data.as_bytes(), true),
-            Binary(data) => write_packet(buf, 0x2, &data, true),
+            Ping(data) => write_packet(buf, 0x9, &data, false),
+            Pong(data) => write_packet(buf, 0xA, &data, false),
+            Text(data) => write_packet(buf, 0x1, data.as_bytes(), false),
+            Binary(data) => write_packet(buf, 0x2, &data, false),
             // TODO(tailhook) should we also change state somehow?
-            Close(c, t) => write_close(buf, c, &t, true),
+            Close(c, t) => write_close(buf, c, &t, false),
         }
     }
 }
@@ -54,12 +54,12 @@ impl Encode for ClientCodec {
     fn encode(&mut self, data: Packet, buf: &mut Buf) {
         use super::Packet::*;
         match data {
-            Ping(data) => write_packet(buf, 0x9, &data, false),
-            Pong(data) => write_packet(buf, 0xA, &data, false),
-            Text(data) => write_packet(buf, 0x1, data.as_bytes(), false),
-            Binary(data) => write_packet(buf, 0x2, &data, false),
+            Ping(data) => write_packet(buf, 0x9, &data, true),
+            Pong(data) => write_packet(buf, 0xA, &data, true),
+            Text(data) => write_packet(buf, 0x1, data.as_bytes(), true),
+            Binary(data) => write_packet(buf, 0x2, &data, true),
             // TODO(tailhook) should we also change state somehow?
-            Close(c, t) => write_close(buf, c, &t, false),
+            Close(c, t) => write_close(buf, c, &t, true),
         }
     }
 }
