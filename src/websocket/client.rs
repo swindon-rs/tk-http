@@ -16,7 +16,7 @@ use base_serializer::{MessageState, HeaderError};
 use client::{Error};
 use enums::{Version, Status};
 use headers::is_close;
-use websocket::Codec as WebsocketCodec;
+use websocket::ClientCodec;
 
 
 
@@ -270,7 +270,7 @@ impl<S: Io, A: Authorizer<S>> HandshakeProto<S, A> {
 impl<S: Io, A> Future for HandshakeProto<S, A>
     where A: Authorizer<S>
 {
-    type Item = (WriteFramed<S, WebsocketCodec>, ReadFramed<S, WebsocketCodec>,
+    type Item = (WriteFramed<S, ClientCodec>, ReadFramed<S, ClientCodec>,
                  A::Result);
     type Error = Error;
     fn poll(&mut self) -> Result<Async<Self::Item>, Error> {
@@ -283,10 +283,10 @@ impl<S: Io, A> Future for HandshakeProto<S, A>
             Some(x) => {
                 let inp = self.input.take()
                     .expect("input still here")
-                    .framed(WebsocketCodec);
+                    .framed(ClientCodec);
                 let out = self.output.take()
                     .expect("input still here")
-                    .framed(WebsocketCodec);
+                    .framed(ClientCodec);
                 Ok(Async::Ready((out, inp, x)))
             }
             None => Ok(Async::NotReady),

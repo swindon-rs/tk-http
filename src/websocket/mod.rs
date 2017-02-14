@@ -15,7 +15,7 @@ pub mod client;
 pub use self::error::Error;
 pub use self::zero_copy::Frame;
 pub use self::alloc::Packet;
-pub use self::codec::Codec;
+pub use self::codec::{ServerCodec, ClientCodec};
 pub use self::dispatcher::{Loop, Dispatcher};
 
 

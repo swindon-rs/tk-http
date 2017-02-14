@@ -16,6 +16,7 @@ log = "0.3.6"
 url = "1.2.3"
 sha1 = "0.2.0"
 byteorder = "0.5.3"
+rand = "0.3.15"
 
 # for curl-rs and "simple" interface (may be move to another crate?)
 futures-cpupool = "0.1.2"

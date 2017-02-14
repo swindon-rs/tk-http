@@ -1,5 +1,6 @@
 use std::str::from_utf8;
 
+use rand::{thread_rng, Rng};
 use tk_bufstream::Buf;
 use byteorder::{BigEndian, ByteOrder};
 
@@ -49,7 +50,7 @@ impl<'a> Into<Packet> for &'a Frame<'a> {
 }
 
 
-pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize)
+pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize, masked: bool)
     -> Result<Option<(Frame<'x>, usize)>, Error>
 {
     use self::Frame::*;
@@ -78,7 +79,7 @@ pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize)
         return Err(Error::TooLong);
     }
     let size = size as usize;
-    let start = fsize + 4 /* mask size */;
+    let start = fsize + if masked { 4 } else { 0 } /* mask size */;
     if buf.len() < start + size {
         return Ok(None);
     }
@@ -90,12 +91,14 @@ pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize)
     if !fin {
         return Err(Error::Fragmented);
     }
-    if !mask {
+    if mask != masked {
         return Err(Error::Unmasked);
     }
-    let mask = [buf[start-4], buf[start-3], buf[start-2], buf[start-1]];
-    for idx in 0..size { // hopefully llvm is smart enough to optimize it
-        buf[start + idx] ^= mask[idx % 4];
+    if mask {
+        let mask = [buf[start-4], buf[start-3], buf[start-2], buf[start-1]];
+        for idx in 0..size { // hopefully llvm is smart enough to optimize it
+            buf[start + idx] ^= mask[idx % 4];
+        }
     }
     let data = &buf[start..(start + size)];
     let frame = match opcode {
@@ -109,19 +112,21 @@ pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize)
     return Ok(Some((frame, start + size)));
 }
 
-pub fn write_packet(buf: &mut Buf, opcode: u8, data: &[u8]) {
+pub fn write_packet(buf: &mut Buf, opcode: u8, data: &[u8], mask: bool) {
     debug_assert!(opcode & 0xF0 == 0);
+    assert!(!mask); // TODO
     let first_byte = opcode | 0x80;  // always fin
+    let mask_bit = if mask { 0x80 } else { 0 };
     match data.len() {
         len @ 0...125 => {
-            buf.extend(&[first_byte, len as u8]);
+            buf.extend(&[first_byte, (len as u8) | mask_bit]);
         }
         len @ 126...65535 => {
-            buf.extend(&[first_byte, 126,
+            buf.extend(&[first_byte, 126 | mask_bit,
                 (len >> 8) as u8, (len & 0xFF) as u8]);
         }
         len => {
-            buf.extend(&[first_byte, 127,
+            buf.extend(&[first_byte, 127 | mask_bit,
                 ((len >> 56) & 0xFF) as u8,
                 ((len >> 48) & 0xFF) as u8,
                 ((len >> 40) & 0xFF) as u8,
@@ -132,14 +137,41 @@ pub fn write_packet(buf: &mut Buf, opcode: u8, data: &[u8]) {
                 (len & 0xFF) as u8]);
         }
     }
+    let mask_data = if mask {
+        let mut bytes = [0u8; 4];
+        thread_rng().fill_bytes(&mut bytes[..]);
+        buf.extend(&bytes[..]);
+        Some((buf.len(), bytes))
+    } else {
+        None
+    };
     buf.extend(data);
+    if let Some((start, bytes)) = mask_data {
+        for idx in 0..(buf.len() - start) { // hopefully llvm will optimize it
+            buf[start + idx] ^= bytes[idx % 4];
+        }
+    };
 }
 
 /// Write close message to websocket
-pub fn write_close(buf: &mut Buf, code: u16, reason: &str) {
+pub fn write_close(buf: &mut Buf, code: u16, reason: &str, mask: bool) {
     let data = reason.as_bytes();
+    let mask_bit = if mask { 0x80 } else { 0 };
     assert!(data.len() <= 123);
-    buf.extend(&[0x88, (data.len() + 2) as u8,
-                  (code >> 8) as u8, (code & 0xFF) as u8]);
+    buf.extend(&[0x88, ((data.len() + 2) as u8) | mask_bit]);
+    let mask_data = if mask {
+        let mut bytes = [0u8; 4];
+        thread_rng().fill_bytes(&mut bytes[..]);
+        buf.extend(&bytes[..]);
+        Some((buf.len(), bytes))
+    } else {
+        None
+    };
+    buf.extend(&[(code >> 8) as u8, (code & 0xFF) as u8]);
     buf.extend(data);
+    if let Some((start, bytes)) = mask_data {
+        for idx in 0..(buf.len() - start) { // hopefully llvm will optimize it
+            buf[start + idx] ^= bytes[idx % 4];
+        }
+    };
 }
