@@ -193,14 +193,14 @@ impl<S: Io> Encoder<S> {
     /// Panics when the request is in a wrong state.
     pub fn done(mut self) -> EncoderDone<S> {
         self.message.add_header(&mut self.buf.out_buf,
-            "Connection", b"upgrade");
+            "Connection", b"upgrade").unwrap();
         self.message.add_header(&mut self.buf.out_buf,
-            "Upgrade", b"websocket");
+            "Upgrade", b"websocket").unwrap();
         // TODO(tailhook) generate real random key
         self.message.add_header(&mut self.buf.out_buf,
-            "Sec-WebSocket-Key", b"x3JJHMbDL1EzLkh9GBhXDw==");
+            "Sec-WebSocket-Key", b"x3JJHMbDL1EzLkh9GBhXDw==").unwrap();
         self.message.add_header(&mut self.buf.out_buf,
-            "Sec-WebSocket-Version", b"13");
+            "Sec-WebSocket-Version", b"13").unwrap();
         self.message.done_headers(&mut self.buf.out_buf)
             .map(|ignore_body| assert!(ignore_body)).unwrap();
         self.message.done(&mut self.buf.out_buf);
