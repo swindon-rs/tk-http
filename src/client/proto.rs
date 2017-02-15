@@ -133,12 +133,23 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
         loop {
             let (state, cont) =
                 match mem::replace(&mut self.reading, InState::Void) {
-                    InState::Idle(io) => {
+                    InState::Idle(mut io) => {
                         if let Some((nr, state)) = self.waiting.pop_front() {
                             let parser = Parser::new(io, nr,
                                 state, self.close.clone());
                             (InState::Read(parser), true)
                         } else {
+                            // This serves for two purposes:
+                            // 1. Detect connection has been closed (i.e.
+                            //    we need to call `poll_read()` every time)
+                            // 2. Detect premature bytes (we didn't sent
+                            //    a request yet, but there is a response)
+                            if io.read()? != 0 {
+                                return Err(Error::PrematureResponseHeaders);
+                            }
+                            if io.done() {
+                                return Err(Error::Closed);
+                            }
                             (InState::Idle(io), false)
                         }
                     }
