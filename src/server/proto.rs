@@ -1,6 +1,7 @@
 use std::mem;
 use std::sync::Arc;
 use std::collections::VecDeque;
+use std::time::{Instant, Duration};
 
 use futures::{Future, Poll, Async};
 use tk_bufstream::{IoBuf, WriteBuf, ReadBuf};
@@ -36,14 +37,19 @@ enum InState<C> {
     Closed,
 }
 
-/// A low-level HTTP/1.x server protocol handler
-pub struct Proto<S: Io, D: Dispatcher<S>> {
+struct PureProto<S: Io, D: Dispatcher<S>> {
     dispatcher: D,
     inbuf: Option<ReadBuf<S>>, // it's optional only for hijacking
     reading: InState<D::Codec>,
     waiting: VecDeque<(ResponseConfig, D::Codec)>,
     writing: OutState<S, <D::Codec as Codec<S>>::ResponseFuture, D::Codec>,
     config: Arc<Config>,
+}
+
+/// A low-level HTTP/1.x server protocol handler
+pub struct Proto<S: Io, D: Dispatcher<S>> {
+    proto: PureProto<S, D>,
+    // TODO(tailhook) handle, timeout
 }
 
 fn new_body(mode: BodyKind, recv_mode: Mode)
@@ -70,17 +76,20 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
     pub fn new(conn: S, cfg: &Arc<Config>, dispatcher: D) -> Proto<S, D> {
         let (cout, cin) = IoBuf::new(conn).split();
         return Proto {
-            dispatcher: dispatcher,
-            inbuf: Some(cin),
-            reading: InState::Headers,
-            waiting: VecDeque::with_capacity(cfg.inflight_request_prealloc),
-            writing: OutState::Idle(cout),
-            config: cfg.clone(),
+            proto: PureProto {
+                dispatcher: dispatcher,
+                inbuf: Some(cin),
+                reading: InState::Headers,
+                waiting: VecDeque::with_capacity(
+                    cfg.inflight_request_prealloc),
+                writing: OutState::Idle(cout),
+                config: cfg.clone(),
+            }
         }
     }
 }
 
-impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
+impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
     /// Resturns Ok(true) if new data has been read
     fn do_reads(&mut self) -> Result<bool, Error> {
         use self::InState::*;
@@ -242,20 +251,33 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
     }
 }
 
-impl<S: Io, D: Dispatcher<S>> Future for Proto<S, D> {
-    type Item = ();
-    type Error = Error;
-
-    fn poll(&mut self) -> Poll<(), Error> {
+impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
+    fn process(&mut self) -> Result<Option<Instant>, Error> {
         self.do_writes()?;
         while self.do_reads()? {
             self.do_writes()?;
         }
         if self.inbuf.as_ref().map(|x| x.done()).unwrap_or(true) {
-            Ok(Async::Ready(()))
+            Ok(None)
         } else {
             // TODO(tailhook) close connection on `Connection: close`
-            Ok(Async::NotReady)
+            Ok(Some(Instant::now() + Duration::new(86400, 0)))
+        }
+    }
+}
+
+impl<S: Io, D: Dispatcher<S>> Future for Proto<S, D> {
+    type Item = ();
+    type Error = Error;
+
+    fn poll(&mut self) -> Poll<(), Error> {
+        match self.proto.process() {
+            Ok(None) => Ok(Async::Ready(())),
+            Ok(Some(timeo)) => {
+                // TODO(tailhook) schedule notification with timeout
+                Ok(Async::NotReady)
+            }
+            Err(e) => Err(e),
         }
     }
 }
