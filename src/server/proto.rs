@@ -46,6 +46,12 @@ struct PureProto<S: Io, D: Dispatcher<S>> {
     waiting: VecDeque<(ResponseConfig, D::Codec)>,
     writing: OutState<S, <D::Codec as Codec<S>>::ResponseFuture, D::Codec>,
     config: Arc<Config>,
+
+    last_byte_read: Instant,
+    last_byte_written: Instant,
+    /// Long-term deadline for reading (headers- or input body_whole- timeout)
+    read_deadline: Instant,
+    response_deadline: Instant,
 }
 
 /// A low-level HTTP/1.x server protocol handler
@@ -86,6 +92,11 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
                     cfg.inflight_request_prealloc),
                 writing: OutState::Idle(cout),
                 config: cfg.clone(),
+
+                last_byte_read: Instant::now(),
+                last_byte_written: Instant::now(),
+                read_deadline: Instant::now() + cfg.first_byte_timeout,
+                response_deadline: Instant::now(),  // irrelevant at start
             }
         }
     }
@@ -114,11 +125,16 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
                 break;
             }
             // TODO(tailhook) Do reads after parse_headers() [optimization]
-            inbuf.read()?;
+            if inbuf.read()? > 0 {
+                self.last_byte_read = Instant::now();
+            }
             let (next, cont) = match mem::replace(&mut self.reading, Closed) {
-                Connected if inbuf.in_buf.len() > 0 => (Headers, true),
+                KeepAlive | Connected if inbuf.in_buf.len() > 0 => {
+                    self.read_deadline = Instant::now()
+                        + self.config.headers_timeout;
+                    (Headers, true)
+                }
                 Connected => (Connected, false),
-                KeepAlive if inbuf.in_buf.len() > 0 => (Headers, true),
                 KeepAlive => (KeepAlive, false),
                 Headers => {
                     match parse_headers(&mut inbuf.in_buf,
@@ -131,6 +147,9 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
                                 self.waiting.push_back((cfg, codec));
                                 (Hijack, true)
                             } else {
+                                let timeo = mode.timeout.unwrap_or(
+                                    self.config.input_body_whole_timeout);
+                                self.read_deadline = Instant::now() + timeo;
                                 (Body(BodyState {
                                     mode: get_mode(&mode),
                                     response_config: cfg,
@@ -163,7 +182,9 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
                                 changed = true;
                                 self.waiting.push_back(
                                     (body.response_config, body.codec));
-                                (Headers, true)
+                                self.read_deadline = Instant::now()
+                                    + self.config.keep_alive_timeout;
+                                (KeepAlive, true)
                             } else {
                                 (Body(body), true) // TODO(tailhook) check
                             }
@@ -195,8 +216,17 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
         loop {
             let (next, cont) = match mem::replace(&mut self.writing, Void) {
                 Idle(mut io) => {
-                    io.flush()?;
+                    let old_len = io.out_buf.len();
+                    if old_len > 0 {
+                        io.flush()?;
+                        if io.out_buf.len() < old_len {
+                            self.last_byte_written = Instant::now();
+                        }
+                    }
+
                     if let Some((rc, mut codec)) = self.waiting.pop_front() {
+                        self.response_deadline = Instant::now()
+                            + self.config.output_body_whole_timeout;
                         let e = encoder::new(io, rc);
                         if matches!(self.reading, Hijack) {
                             (Switch(codec.start_response(e), codec), true)
@@ -217,6 +247,8 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
                                 mode: Progressive(_),
                                 codec: ref mut _codec, ..})
                             => {
+                                self.response_deadline = Instant::now()
+                                    + self.config.output_body_whole_timeout;
                                 // TODO(tailhook) start writing now
                                 unimplemented!();
                             }
@@ -259,17 +291,17 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
 }
 
 impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
-    /// Does all needed processing and returns deadline when to stop
-    /// the connection
-    fn process(&mut self) -> Result<Option<Instant>, Error> {
+    /// Does all needed processing and returns Ok(true) if connection is fine
+    /// and Ok(false) if it needs to be closed
+    fn process(&mut self) -> Result<bool, Error> {
         self.do_writes()?;
         while self.do_reads()? {
             self.do_writes()?;
         }
         if self.inbuf.as_ref().map(|x| x.done()).unwrap_or(true) {
-            Ok(None)
+            Ok(false)
         } else {
-            Ok(Some(Instant::now() + Duration::new(86400, 0)))
+            Ok(true)
         }
     }
 }
@@ -280,8 +312,8 @@ impl<S: Io, D: Dispatcher<S>> Future for Proto<S, D> {
 
     fn poll(&mut self) -> Poll<(), Error> {
         match self.proto.process() {
-            Ok(None) => Ok(Async::Ready(())),
-            Ok(Some(timeo)) => {
+            Ok(false) => Ok(Async::Ready(())),
+            Ok(true) => {
                 // TODO(tailhook) schedule notification with timeout
                 Ok(Async::NotReady)
             }

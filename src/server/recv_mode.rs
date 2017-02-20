@@ -1,22 +1,7 @@
 use std::time::Duration;
 
-/// This type is returned from `headers_received` handler of either
-/// client client or server protocol handler
-///
-/// The marker is used to denote whether you want to have the whole response
-/// buffered for you or read chunk by chunk.
-///
-/// The `Progressive` (chunk by chunk) mode is mostly useful for proxy servers.
-/// Or it may be useful if your handler is able to parse data without holding
-/// everything in the memory.
-///
-/// Otherwise, it's best to use `Buffered` mode (for example, comparing with
-/// using your own buffering). We do our best to optimize it for you.
-#[derive(Debug, Clone)]
-pub struct RecvMode {
-    mode: Mode,
-    timeout: Option<Duration>,
-}
+use server::RecvMode;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
