@@ -31,6 +31,8 @@ struct BodyState<C> {
 }
 
 enum InState<C> {
+    Connected,
+    KeepAlive,
     Headers,
     Body(BodyState<C>),
     Hijack,
@@ -79,7 +81,7 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
             proto: PureProto {
                 dispatcher: dispatcher,
                 inbuf: Some(cin),
-                reading: InState::Headers,
+                reading: InState::Connected,
                 waiting: VecDeque::with_capacity(
                     cfg.inflight_request_prealloc),
                 writing: OutState::Idle(cout),
@@ -103,7 +105,8 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
         };
         loop {
             let limit = match self.reading {
-                Headers => self.config.inflight_request_limit,
+                Headers| Connected | KeepAlive
+                => self.config.inflight_request_limit,
                 Body(..) => self.config.inflight_request_limit-1,
                 Closed | Hijack => return Ok(changed),
             };
@@ -113,6 +116,10 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
             // TODO(tailhook) Do reads after parse_headers() [optimization]
             inbuf.read()?;
             let (next, cont) = match mem::replace(&mut self.reading, Closed) {
+                Connected if inbuf.in_buf.len() > 0 => (Headers, true),
+                Connected => (Connected, false),
+                KeepAlive if inbuf.in_buf.len() > 0 => (Headers, true),
+                KeepAlive => (KeepAlive, false),
                 Headers => {
                     match parse_headers(&mut inbuf.in_buf,
                                         &mut self.dispatcher)?
@@ -199,7 +206,7 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
                     } else {
                         match self.reading {
                             Body(BodyState { mode: BufferedUpfront(..), ..})
-                            | Closed | Headers
+                            | Closed | Headers | Connected | KeepAlive
                             => {
                                 (Idle(io), false)
                             }
@@ -252,6 +259,8 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
 }
 
 impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
+    /// Does all needed processing and returns deadline when to stop
+    /// the connection
     fn process(&mut self) -> Result<Option<Instant>, Error> {
         self.do_writes()?;
         while self.do_reads()? {
@@ -260,7 +269,6 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
         if self.inbuf.as_ref().map(|x| x.done()).unwrap_or(true) {
             Ok(None)
         } else {
-            // TODO(tailhook) close connection on `Connection: close`
             Ok(Some(Instant::now() + Duration::new(86400, 0)))
         }
     }
