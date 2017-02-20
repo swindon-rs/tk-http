@@ -109,7 +109,8 @@ fn main() {
                         let rx = rx.map_err(|_| format!("stream closed"));
                         Loop::server(out, inp, rx, Echo(tx), &wcfg)
                         .map_err(|e| println!("websocket closed: {}", e))
-                    }))
+                    }),
+                &h1)
             .map_err(|e| { println!("Connection error: {}", e); })
             .then(|_| Ok(())) // don't fail, please
         })

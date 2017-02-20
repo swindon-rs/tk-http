@@ -71,7 +71,8 @@ fn main() {
                         }
                     })
                     .map_err(|_| -> Error { unimplemented!(); })
-                }))
+                }),
+                &h1)
             .map_err(|e| { println!("Connection error: {}", e); })
         })
         .buffer_unordered(200000)

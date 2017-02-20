@@ -1,3 +1,4 @@
+use std::io;
 use std::mem;
 use std::sync::Arc;
 use std::collections::VecDeque;
@@ -6,6 +7,7 @@ use std::time::{Instant, Duration};
 use futures::{Future, Poll, Async};
 use tk_bufstream::{IoBuf, WriteBuf, ReadBuf};
 use tokio_core::io::Io;
+use tokio_core::reactor::{Handle, Timeout};
 
 use super::encoder::{self, get_inner, ResponseConfig};
 use super::{Dispatcher, Codec, Error, Config};
@@ -39,7 +41,7 @@ enum InState<C> {
     Closed,
 }
 
-struct PureProto<S: Io, D: Dispatcher<S>> {
+pub struct PureProto<S: Io, D: Dispatcher<S>> {
     dispatcher: D,
     inbuf: Option<ReadBuf<S>>, // it's optional only for hijacking
     reading: InState<D::Codec>,
@@ -57,7 +59,8 @@ struct PureProto<S: Io, D: Dispatcher<S>> {
 /// A low-level HTTP/1.x server protocol handler
 pub struct Proto<S: Io, D: Dispatcher<S>> {
     proto: PureProto<S, D>,
-    // TODO(tailhook) handle, timeout
+    handle: Handle,
+    timeout: Timeout,
 }
 
 fn new_body(mode: BodyKind, recv_mode: Mode)
@@ -81,28 +84,39 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
     /// Create a new protocol implementation from a TCP connection and a config
     ///
     /// You should use this protocol as a `Sink`
-    pub fn new(conn: S, cfg: &Arc<Config>, dispatcher: D) -> Proto<S, D> {
-        let (cout, cin) = IoBuf::new(conn).split();
+    pub fn new(conn: S, cfg: &Arc<Config>, dispatcher: D,
+        handle: &Handle)
+        -> Proto<S, D>
+    {
         return Proto {
-            proto: PureProto {
-                dispatcher: dispatcher,
-                inbuf: Some(cin),
-                reading: InState::Connected,
-                waiting: VecDeque::with_capacity(
-                    cfg.inflight_request_prealloc),
-                writing: OutState::Idle(cout),
-                config: cfg.clone(),
-
-                last_byte_read: Instant::now(),
-                last_byte_written: Instant::now(),
-                read_deadline: Instant::now() + cfg.first_byte_timeout,
-                response_deadline: Instant::now(),  // irrelevant at start
-            }
+            proto: PureProto::new(conn, cfg, dispatcher),
+            handle: handle.clone(),
+            timeout: Timeout::new(cfg.first_byte_timeout, handle)
+                .expect("can always add a timeout"),
         }
     }
 }
 
 impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
+    pub fn new(conn: S, cfg: &Arc<Config>, dispatcher: D)
+        -> PureProto<S, D>
+    {
+        let (cout, cin) = IoBuf::new(conn).split();
+        PureProto {
+            dispatcher: dispatcher,
+            inbuf: Some(cin),
+            reading: InState::Connected,
+            waiting: VecDeque::with_capacity(
+                cfg.inflight_request_prealloc),
+            writing: OutState::Idle(cout),
+            config: cfg.clone(),
+
+            last_byte_read: Instant::now(),
+            last_byte_written: Instant::now(),
+            read_deadline: Instant::now() + cfg.first_byte_timeout,
+            response_deadline: Instant::now(),  // irrelevant at start
+        }
+    }
     /// Resturns Ok(true) if new data has been read
     fn do_reads(&mut self) -> Result<bool, Error> {
         use self::InState::*;
@@ -259,6 +273,8 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
                 Write(mut f) => {
                     match f.poll()? {
                         Async::Ready(x) => {
+                            self.read_deadline = Instant::now()
+                                + self.config.keep_alive_timeout;
                             (Idle(get_inner(x)), true)
                         }
                         Async::NotReady => {
@@ -304,6 +320,22 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
             Ok(true)
         }
     }
+    fn timeout(&mut self) -> Option<Instant> {
+        use self::OutState::*;
+        use self::InState::*;
+
+        match self.writing {
+            Idle(..) => {}
+            Write(..) => return Some(self.response_deadline),
+            Switch(..) => return None,  // TODO(tailhook) is it right?
+            Void => return None,  // TODO(tailhook) is it reachable?
+        }
+        if self.waiting.len() > 0 { // if there are requests processing now
+                                    // we don't have a read timeout
+            return None;
+        }
+        return Some(self.read_deadline);
+    }
 }
 
 impl<S: Io, D: Dispatcher<S>> Future for Proto<S, D> {
@@ -315,9 +347,98 @@ impl<S: Io, D: Dispatcher<S>> Future for Proto<S, D> {
             Ok(false) => Ok(Async::Ready(())),
             Ok(true) => {
                 // TODO(tailhook) schedule notification with timeout
-                Ok(Async::NotReady)
+                match self.proto.timeout() {
+                    Some(val) => {
+                        self.timeout = Timeout::new(val - Instant::now(),
+                            &self.handle)
+                            .expect("can always add a timeout");
+                        let timeo = self.timeout.poll()
+                            .expect("timeout can't fail on poll");
+                        match timeo {
+                            Async::Ready(()) => Err(Error::Timeout),
+                            Async::NotReady => Ok(Async::NotReady),
+                        }
+                    }
+                    None => {
+                        // No timeout. This means we are waiting for request
+                        // handler to do it's work. Request handler should have
+                        // some timeout handler itself.
+                        Ok(Async::NotReady)
+                    }
+                }
             }
             Err(e) => Err(e),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use futures::{Empty, Async, Future, empty};
+    use tk_bufstream::{MockData, IoBuf, ReadBuf, WriteBuf};
+
+    use super::PureProto;
+    use server::{Config, Dispatcher, Codec};
+    use server::{Head, RecvMode, Error, Encoder, EncoderDone};
+
+    struct MockDisp {
+    }
+
+    struct MockCodec {
+    }
+
+    impl Dispatcher<MockData> for MockDisp {
+        type Codec = MockCodec;
+
+        fn headers_received(&mut self, headers: &Head)
+            -> Result<Self::Codec, Error>
+        {
+            Ok(MockCodec {})
+        }
+    }
+
+    impl Codec<MockData> for MockCodec {
+        type ResponseFuture = Empty<EncoderDone<MockData>, Error>;
+        fn recv_mode(&mut self) -> RecvMode {
+            RecvMode::buffered_upfront(1024)
+        }
+        fn data_received(&mut self, data: &[u8], end: bool)
+            -> Result<Async<usize>, Error>
+        {
+            assert!(end);
+            assert_eq!(data.len(), 0);
+            Ok(Async::Ready(0))
+        }
+        fn start_response(&mut self, e: Encoder<MockData>) -> Self::ResponseFuture
+        {
+            empty()
+        }
+        fn hijack(&mut self, write_buf: WriteBuf<MockData>,
+                             read_buf: ReadBuf<MockData>){
+            unimplemented!();
+        }
+    }
+
+    #[test]
+    fn simple_get_request() {
+        let mock = MockData::new();
+        let mut proto = PureProto::new(mock.clone(),
+            &Arc::new(Config::new()), MockDisp {});
+        proto.process().unwrap();
+        mock.add_input("GET / HTTP/1.0\r\n\r\n");
+        proto.process().unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected="Version")]
+    fn failing_get_request() {
+        let mock = MockData::new();
+        let mut proto = PureProto::new(mock.clone(),
+            &Arc::new(Config::new()), MockDisp {});
+        proto.process().unwrap();
+        mock.add_input("GET / TTMP/2.0\r\n\r\n");
+        proto.process().unwrap();
     }
 }

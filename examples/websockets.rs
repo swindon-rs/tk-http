@@ -80,7 +80,8 @@ fn main() {
                         inp.forward(out)
                         .map(|_| ())
                         .map_err(|e| error!("Websock err: {}", e))
-                    }))
+                    }),
+                &h1)
             .map_err(|e| { println!("Connection error: {}", e); })
             .then(|_| Ok(())) // don't fail, please
         })
