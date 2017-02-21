@@ -17,8 +17,7 @@ use tokio_core::io::Io;
 
 use enums::Status;
 use enums::Version;
-use client::{Error, Codec, Encoder, EncoderDone, Head};
-use client::client::RecvMode;
+use client::{Error, Codec, Encoder, EncoderDone, Head, RecvMode};
 
 /// Fully buffered (in-memory) writing request and reading response
 ///

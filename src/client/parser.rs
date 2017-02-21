@@ -10,7 +10,8 @@ use httparse;
 use tk_bufstream::{ReadBuf, Buf};
 
 use enums::Version;
-use client::client::{BodyKind, RecvMode};
+use client::client::{BodyKind};
+use client::recv_mode::RecvMode;
 use headers;
 use chunked;
 use body_parser::BodyProgress;
@@ -125,7 +126,7 @@ fn new_body(mode: BodyKind, recv_mode: RecvMode)
     -> Result<BodyProgress, Error>
 {
     use super::client::BodyKind as B;
-    use super::client::RecvMode as M;
+    use super::recv_mode::RecvMode as M;
     use super::Error::*;
     use body_parser::BodyProgress as P;
     match (mode, recv_mode) {
@@ -206,7 +207,7 @@ impl<S: Io, C: Codec<S>> Parser<S, C> {
     }
     fn read_and_parse(&mut self) -> Poll<(), Error> {
         use self::State::*;
-        use client::client::RecvMode::*;
+        use client::recv_mode::RecvMode::*;
         let mut io = self.io.as_mut().expect("buffer is still here");
         self.state = if let Headers {
                 ref request_state,

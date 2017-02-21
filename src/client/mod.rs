@@ -1,18 +1,20 @@
 //! The HTTP/1.x client protocol implementation
 //!
-mod simple;
-mod errors;
 mod client;
-mod encoder;
-mod proto;
-mod parser;
 mod config;
+mod encoder;
+mod errors;
 mod head;
+mod parser;
+mod proto;
+mod recv_mode;
+mod simple;
 pub mod buffered;
 
 pub use self::simple::fetch_once_buffered;
 pub use self::errors::Error;
-pub use self::client::{Client, Codec, RecvMode};
+pub use self::client::{Client, Codec};
+pub use self::recv_mode::RecvMode;
 pub use self::encoder::{Encoder, EncoderDone};
 pub use self::proto::{Proto};
 
