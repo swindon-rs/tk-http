@@ -1,18 +1,14 @@
+use client::RecvMode;
 
-/// This type is returned from `headers_received` handler of either
-/// client client or server protocol handler
-///
-/// The marker is used to denote whether you want to have the whole request
-/// buffered for you or read chunk by chunk.
-///
-/// The `Progressive` (chunk by chunk) mode is mostly useful for proxy servers.
-/// Or it may be useful if your handler is able to parse data without holding
-/// everything in the memory.
-///
-/// Otherwise, it's best to use `Buffered` mode (for example, comparing with
-/// using your own buffering). We do our best to optimize it for you.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RecvMode {
+pub enum Mode {
+    Buffered(usize),
+    Progressive(usize),
+}
+
+
+impl RecvMode {
     /// Download whole message body (request or response) into the memory.
     ///
     /// The argument is maximum size of the body. The Buffered variant
@@ -22,7 +18,11 @@ pub enum RecvMode {
     /// nor *minimum* size of the body.
     ///
     /// Note the buffer size is asserted on if it's bigger than max buffer size
-    Buffered(usize),
+    pub fn buffered(maximum_size_of_body: usize) -> RecvMode {
+        RecvMode {
+            mode: Mode::Buffered(maximum_size_of_body),
+        }
+    }
     /// Fetch data chunk-by-chunk.
     ///
     /// The parameter denotes minimum number of bytes that may be passed
@@ -31,5 +31,9 @@ pub enum RecvMode {
     /// use of `Progressive(1)` is perfectly okay (for example if you use http
     /// request body as a persistent connection for sending multiple messages
     /// on-demand)
-    Progressive(usize),
+    pub fn progressive(min_bytes_hint: usize) -> RecvMode {
+        RecvMode {
+            mode: Mode::Progressive(min_bytes_hint),
+        }
+    }
 }

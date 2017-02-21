@@ -72,7 +72,7 @@ impl<S: Io> Codec<S> for Buffered {
             }).collect(),
             body: Vec::new(),
         });
-        Ok(RecvMode::Buffered(self.max_response_length))
+        Ok(RecvMode::buffered(self.max_response_length))
     }
     fn data_received(&mut self, data: &[u8], end: bool)
         -> Result<Async<usize>, Error>

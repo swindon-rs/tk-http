@@ -11,7 +11,7 @@ use tk_bufstream::{ReadBuf, Buf};
 
 use enums::Version;
 use client::client::{BodyKind};
-use client::recv_mode::RecvMode;
+use client::recv_mode::Mode;
 use headers;
 use chunked;
 use body_parser::BodyProgress;
@@ -32,7 +32,7 @@ enum State {
         close_signal: Arc<AtomicBool>,
     },
     Body {
-        mode: RecvMode,
+        mode: Mode,
         progress: BodyProgress,
     },
 }
@@ -122,11 +122,11 @@ fn scan_headers<'x>(is_head: bool, code: u16, headers: &'x [httparse::Header])
     Ok((result, connection, close))
 }
 
-fn new_body(mode: BodyKind, recv_mode: RecvMode)
+fn new_body(mode: BodyKind, recv_mode: Mode)
     -> Result<BodyProgress, Error>
 {
     use super::client::BodyKind as B;
-    use super::recv_mode::RecvMode as M;
+    use super::recv_mode::Mode as M;
     use super::Error::*;
     use body_parser::BodyProgress as P;
     match (mode, recv_mode) {
@@ -183,8 +183,8 @@ fn parse_headers<S: Io, C: Codec<S>>(
     buffer.consume(bytes);
     Ok(Some((
         State::Body {
-            mode: mode,
-            progress: new_body(body, mode)?,
+            mode: mode.mode,
+            progress: new_body(body, mode.mode)?,
         },
         close,
     )))
@@ -207,7 +207,7 @@ impl<S: Io, C: Codec<S>> Parser<S, C> {
     }
     fn read_and_parse(&mut self) -> Poll<(), Error> {
         use self::State::*;
-        use client::recv_mode::RecvMode::*;
+        use client::recv_mode::Mode::*;
         let mut io = self.io.as_mut().expect("buffer is still here");
         self.state = if let Headers {
                 ref request_state,
