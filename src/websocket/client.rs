@@ -16,7 +16,7 @@ use base_serializer::{MessageState, HeaderError};
 use client::{Error};
 use enums::{Version, Status};
 use headers::is_close;
-use websocket::ClientCodec;
+use websocket::{ClientCodec, Key};
 
 
 
@@ -197,8 +197,8 @@ impl<S: Io> Encoder<S> {
         self.message.add_header(&mut self.buf.out_buf,
             "Upgrade", b"websocket").unwrap();
         // TODO(tailhook) generate real random key
-        self.message.add_header(&mut self.buf.out_buf,
-            "Sec-WebSocket-Key", b"x3JJHMbDL1EzLkh9GBhXDw==").unwrap();
+        self.message.format_header(&mut self.buf.out_buf,
+            "Sec-WebSocket-Key", Key::new()).unwrap();
         self.message.add_header(&mut self.buf.out_buf,
             "Sec-WebSocket-Version", b"13").unwrap();
         self.message.done_headers(&mut self.buf.out_buf)

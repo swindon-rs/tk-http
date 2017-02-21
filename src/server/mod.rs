@@ -17,7 +17,7 @@ pub use self::codec::{Codec, Dispatcher};
 pub use self::proto::Proto;
 pub use self::headers::{Head, HeaderIter};
 pub use self::request_target::RequestTarget;
-pub use self::websocket::{WebsocketAccept, WebsocketHandshake};
+pub use self::websocket::{WebsocketHandshake};
 
 use std::time::Duration;
 

@@ -4,19 +4,21 @@
 //! contains websocket message types and similar stuff.
 use std::time::Duration;
 
-mod error;
-mod zero_copy;
 mod alloc;
 mod codec;
-mod dispatcher;
 mod config;
+mod dispatcher;
+mod error;
+mod keys;
+mod zero_copy;
 pub mod client;
 
-pub use self::error::Error;
-pub use self::zero_copy::Frame;
 pub use self::alloc::Packet;
 pub use self::codec::{ServerCodec, ClientCodec};
 pub use self::dispatcher::{Loop, Dispatcher};
+pub use self::error::Error;
+pub use self::keys::{GUID, Accept, Key};
+pub use self::zero_copy::Frame;
 
 
 /// Configuration of a `websocket::Loop` object (a server-side websocket

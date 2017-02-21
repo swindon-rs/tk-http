@@ -1,24 +1,15 @@
-use std::fmt;
 use std::ascii::AsciiExt;
-use std::str::{from_utf8, from_utf8_unchecked};
-
-use sha1::Sha1;
+use std::str::{from_utf8};
 
 use super::{Head};
+use websocket::{Accept, GUID};
 
-const GUID: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-
-/// The `Sec-WebSocket-Accept` header value
-///
-/// You can add it using `enc.format_header("Sec-WebSocket-Accept", accept)`.
-/// Or use any other thing that supports `Display`.
-pub struct WebsocketAccept([u8; 20]);
 
 /// Contains all the imporant parts of a websocket handshake
 #[derive(Debug)]
 pub struct WebsocketHandshake {
     /// The destination value of `Sec-WebSocket-Accept`
-    pub accept: WebsocketAccept,
+    pub accept: Accept,
     /// List of `Sec-WebSocket-Protocol` tokens
     pub protocols: Vec<String>,
     /// List of `Sec-WebSocket-Extensions` tokens
@@ -59,10 +50,7 @@ pub fn get_handshake(req: &Head) -> Result<Option<WebsocketHandshake>, ()> {
                 debug!("Duplicate Sec-WebSocket-Key");
                 return Err(());
             }
-            let mut sha1 = Sha1::new();
-            sha1.update(bytes_trim(h.value));
-            sha1.update(GUID.as_bytes());
-            accept = Some(WebsocketAccept(sha1.digest().bytes()));
+            accept = Some(Accept::from_key_bytes(bytes_trim(h.value)));
         } else if h.name.eq_ignore_ascii_case("Sec-WebSocket-Version") {
             // Only version 13 is supported
             if bytes_trim(h.value) != b"13" {
@@ -111,37 +99,4 @@ pub fn get_handshake(req: &Head) -> Result<Option<WebsocketHandshake>, ()> {
         protocols: protocols,
         extensions: extensions,
     }))
-}
-
-impl fmt::Display for WebsocketAccept {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        const CHARS: &'static[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
-                                      abcdefghijklmnopqrstuvwxyz\
-                                      0123456789+/";
-        let mut buf = [0u8; 28];
-        for i in 0..6 {
-            let n = ((self.0[i*3+0] as usize) << 16) |
-                    ((self.0[i*3+1] as usize) <<  8) |
-                     (self.0[i*3+2] as usize) ;
-            buf[i*4+0] = CHARS[(n >> 18) & 63];
-            buf[i*4+1] = CHARS[(n >> 12) & 63];
-            buf[i*4+2] = CHARS[(n >>  6) & 63];
-            buf[i*4+3] = CHARS[(n >>  0) & 63];
-        }
-        let n = ((self.0[18] as usize) << 16) |
-                ((self.0[19] as usize) <<  8);
-        buf[24] = CHARS[(n >> 18) & 63];
-        buf[25] = CHARS[(n >> 12) & 63];
-        buf[26] = CHARS[(n >> 6) & 63];
-        buf[27] = b'=';
-        fmt::Write::write_str(f, unsafe {
-            from_utf8_unchecked(&buf)
-        })
-    }
-}
-
-impl fmt::Debug for WebsocketAccept {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "WebsocketAccept({})", self)
-    }
 }
