@@ -64,5 +64,8 @@ quick_error! {
         RequestTooLong {
             description("request body is too big")
         }
+        Timeout {
+            description("timeout while reading or writing request")
+        }
     }
 }

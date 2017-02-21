@@ -55,7 +55,8 @@ fn main() {
         .map_err(|e| { println!("Accept error: {}", e); })
         .map(move |(socket, addr)| {
             Proto::new(socket, &cfg,
-                BufferedDispatcher::new(addr, &h1, || service))
+                BufferedDispatcher::new(addr, &h1, || service),
+                &h1)
             .map_err(|e| { println!("Connection error: {}", e); })
         })
         .buffer_unordered(200000)
