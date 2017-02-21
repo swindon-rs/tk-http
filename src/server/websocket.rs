@@ -2,7 +2,7 @@ use std::ascii::AsciiExt;
 use std::str::{from_utf8};
 
 use super::{Head};
-use websocket::{Accept, GUID};
+use websocket::Accept;
 
 
 /// Contains all the imporant parts of a websocket handshake

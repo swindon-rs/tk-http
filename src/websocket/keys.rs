@@ -1,10 +1,11 @@
 use rand::{Rng, thread_rng};
 use std::fmt;
-use std::str::{from_utf8, from_utf8_unchecked};
+use std::str::{from_utf8_unchecked};
 
 use sha1::Sha1;
 
 
+/// WebSocket GUID constant (provided by spec)
 pub const GUID: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 /// The `Sec-WebSocket-Accept` header value

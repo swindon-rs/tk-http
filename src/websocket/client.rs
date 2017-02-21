@@ -1,10 +1,7 @@
+//! Websocket client implementation
+//!
 use std::ascii::AsciiExt;
-use std::borrow::Cow;
 use std::fmt::Display;
-use std::io;
-use std::slice::Iter as SliceIter;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 
 use futures::{Future, Async};
 use httparse::{self, Header};
@@ -15,7 +12,6 @@ use base_serializer::{MessageState, HeaderError};
 // TODO(tailhook) change the error
 use client::{Error};
 use enums::{Version, Status};
-use headers::is_close;
 use websocket::{ClientCodec, Key};
 
 
@@ -80,19 +76,21 @@ pub struct Head<'a> {
     headers: &'a [Header<'a>],
 }
 
+/// A future that resolves to framed streams when websocket handshake is done
 pub struct HandshakeProto<S, A> {
     input: Option<ReadBuf<S>>,
     output: Option<WriteBuf<S>>,
     authorizer: A,
 }
 
-
+/// Default handshake handler, if you just want to get websocket connected
 pub struct SimpleAuthorizer {
     host: String,
     path: String,
 }
 
 impl SimpleAuthorizer {
+    /// Create a new authorizer that sends specified host and path
     pub fn new<A, B>(host: A, path: B) -> SimpleAuthorizer
         where A: Into<String>,
               B: Into<String>,
@@ -116,7 +114,7 @@ impl<S: Io> Authorizer<S> for SimpleAuthorizer {
             env!("CARGO_PKG_VERSION"))).unwrap();
         e.done()
     }
-    fn headers_received(&mut self, headers: &Head)
+    fn headers_received(&mut self, _headers: &Head)
         -> Result<Self::Result, Error>
     {
         Ok(())
@@ -216,6 +214,7 @@ fn encoder<S: Io>(io: WriteBuf<S>) -> Encoder<S> {
 }
 
 impl<S: Io, A: Authorizer<S>> HandshakeProto<S, A> {
+    /// Create an instance of future from already connected socket
     pub fn new(transport: S, mut authorizer: A) -> HandshakeProto<S, A> {
         let (tx, rx) = IoBuf::new(transport).split();
         let out = authorizer.write_headers(encoder(tx)).buf;
@@ -292,17 +291,6 @@ impl<S: Io, A> Future for HandshakeProto<S, A>
             None => Ok(Async::NotReady),
         }
     }
-}
-
-/// Iterator over all meaningful headers for the response
-///
-/// This iterator is created by `Head::headers`. And iterates over all
-/// headers except hop-by-hop ones.
-///
-/// Note: duplicate headers are not glued together neither they are sorted
-pub struct HeaderIter<'a> {
-    head: &'a Head<'a>,
-    iter: SliceIter<'a, Header<'a>>,
 }
 
 impl<'a> Head<'a> {

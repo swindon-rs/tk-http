@@ -1,8 +1,7 @@
-use std::io;
 use std::mem;
 use std::sync::Arc;
 use std::collections::VecDeque;
-use std::time::{Instant, Duration};
+use std::time::Instant;
 
 use futures::{Future, Poll, Async};
 use tk_bufstream::{IoBuf, WriteBuf, ReadBuf};
@@ -322,7 +321,6 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
     }
     fn timeout(&mut self) -> Option<Instant> {
         use self::OutState::*;
-        use self::InState::*;
 
         match self.writing {
             Idle(..) => {}
