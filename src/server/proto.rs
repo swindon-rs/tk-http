@@ -9,9 +9,10 @@ use tokio_core::io::Io;
 use tokio_core::reactor::{Handle, Timeout};
 
 use super::encoder::{self, get_inner, ResponseConfig};
-use super::{Dispatcher, Codec, Error, Config};
+use super::{Dispatcher, Codec, Config};
 use super::headers::parse_headers;
 use super::codec::BodyKind;
+use server::error::{ErrorEnum, Error};
 use server::recv_mode::{Mode, get_mode};
 use chunked;
 use body_parser::BodyProgress;
@@ -63,16 +64,16 @@ pub struct Proto<S: Io, D: Dispatcher<S>> {
 }
 
 fn new_body(mode: BodyKind, recv_mode: Mode)
-    -> Result<BodyProgress, Error>
+    -> Result<BodyProgress, ErrorEnum>
 {
     use super::codec::BodyKind as B;
     use super::recv_mode::Mode as M;
     use body_parser::BodyProgress as P;
     match (mode, recv_mode) {
         // TODO(tailhook) check size < usize
-        (B::Unsupported, _) => Err(Error::UnsupportedBody),
+        (B::Unsupported, _) => Err(ErrorEnum::UnsupportedBody),
         (B::Fixed(x), M::BufferedUpfront(b)) if x > b as u64 => {
-            Err(Error::RequestTooLong)
+            Err(ErrorEnum::RequestTooLong)
         }
         (B::Fixed(x), _)  => Ok(P::Fixed(x as usize)),
         (B::Chunked, _) => Ok(P::Chunked(chunked::State::new())),
@@ -138,7 +139,7 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
                 break;
             }
             // TODO(tailhook) Do reads after parse_headers() [optimization]
-            if inbuf.read()? > 0 {
+            if inbuf.read().map_err(ErrorEnum::Io)? > 0 {
                 self.last_byte_read = Instant::now();
             }
             let (next, cont) = match mem::replace(&mut self.reading, Closed) {
@@ -175,13 +176,14 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
                     }
                 }
                 Body(mut body) => {
-                    body.progress.parse(inbuf)?;
+                    body.progress.parse(inbuf)
+                        .map_err(ErrorEnum::ChunkParseError)?;
                     let (bytes, done) = body.progress.check_buf(inbuf);
                     let operation = if done {
                         Some(body.codec.data_received(
                             &inbuf.in_buf[..bytes], true)?)
                     } else if inbuf.done() {
-                        return Err(Error::ConnectionReset);
+                        return Err(ErrorEnum::ConnectionReset.into());
                     } else if matches!(body.mode, Mode::Progressive(x) if x <= bytes) {
                         Some(body.codec.data_received(
                             &inbuf.in_buf[..bytes], false)?)
@@ -231,7 +233,7 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
                 Idle(mut io) => {
                     let old_len = io.out_buf.len();
                     if old_len > 0 {
-                        io.flush()?;
+                        io.flush().map_err(ErrorEnum::Io)?;
                         if io.out_buf.len() < old_len {
                             self.last_byte_written = Instant::now();
                         }
@@ -353,7 +355,7 @@ impl<S: Io, D: Dispatcher<S>> Future for Proto<S, D> {
                         let timeo = self.timeout.poll()
                             .expect("timeout can't fail on poll");
                         match timeo {
-                            Async::Ready(()) => Err(Error::Timeout),
+                            Async::Ready(()) => Err(ErrorEnum::Timeout.into()),
                             Async::NotReady => Ok(Async::NotReady),
                         }
                     }

@@ -1,13 +1,16 @@
 use std::io;
+use std::fmt;
 use std::convert::From;
 
 use httparse;
 
+/// HTTP server error
+pub struct Error(ErrorEnum);
+
 
 quick_error! {
-    /// HTTP server error
     #[derive(Debug)]
-    pub enum Error {
+    pub enum ErrorEnum {
         /// Socket IO error
         Io(err: io::Error) {
             description("I/O error")
@@ -67,5 +70,32 @@ quick_error! {
         Timeout {
             description("timeout while reading or writing request")
         }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+impl From<ErrorEnum> for Error {
+    fn from(err: ErrorEnum) -> Self {
+        Error(err)
+    }
+}
+
+impl ::std::error::Error for Error {
+    fn description(&self) -> &str {
+        self.0.description()
+    }
+    fn cause(&self) -> Option<&::std::error::Error> {
+        self.0.cause()
     }
 }

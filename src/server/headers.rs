@@ -7,7 +7,8 @@ use httparse::{self, EMPTY_HEADER, Request, Header};
 use tokio_core::io::Io;
 use tk_bufstream::Buf;
 
-use super::{Error, RequestTarget, Dispatcher};
+use server::error::{Error, ErrorEnum};
+use super::{RequestTarget, Dispatcher};
 use super::codec::BodyKind;
 use super::encoder::ResponseConfig;
 use super::websocket::{self, WebsocketHandshake};
@@ -198,7 +199,7 @@ impl<'a> Head<'a> {
 }
 
 fn scan_headers<'x>(raw_request: &'x Request)
-    -> Result<RequestConfig<'x>, Error>
+    -> Result<RequestConfig<'x>, ErrorEnum>
 {
     // Implements the body length algorithm for requests:
     // http://httpwg.github.io/specs/rfc7230.html#message.body.length
@@ -217,7 +218,7 @@ fn scan_headers<'x>(raw_request: &'x Request)
     //    (6th option in RFC).
     // 4. In all other cases the request is a bad request.
     use super::codec::BodyKind::*;
-    use super::Error::*;
+    use server::error::ErrorEnum::*;
 
     let mut has_content_length = false;
     let mut close = raw_request.version.unwrap() == 0;
@@ -318,7 +319,7 @@ pub fn parse_headers<S, D>(buffer: &mut Buf, disp: &mut D)
             raw = Request::new(&mut vec);
             result = raw.parse(&buffer[..]);
         }
-        match result? {
+        match result.map_err(ErrorEnum::ParseError)? {
             httparse::Status::Complete(bytes) => {
                 let cfg = scan_headers(&raw)?;
                 let ver = raw.version.unwrap();
