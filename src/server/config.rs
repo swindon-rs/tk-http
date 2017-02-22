@@ -15,7 +15,7 @@ impl Config {
             input_body_byte_timeout: Duration::new(15, 0),
             input_body_whole_timeout: Duration::new(3600, 0),
             output_body_byte_timeout: Duration::new(15, 0),
-            output_body_whole_timeout: Duration::new(300, 0),
+            output_body_whole_timeout: Duration::new(3600, 0),
         }
     }
     /// A number of inflight requests until we stop reading more requests
