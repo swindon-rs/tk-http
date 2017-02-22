@@ -74,9 +74,11 @@ impl Config {
     }
     /// Timeout for the whole response body to be send to the client
     ///
-    /// This timeout is taken literally for any response, so it must be
-    /// as large as needed for slowest client fetching slowest file. I.e.
-    /// it's fine if it's
+    /// This timeout is taken literally for any response, so it must be as
+    /// large as needed for slowest client fetching slowest file. I.e.  it
+    /// might be as big as a hour or day for some applications, but consider
+    /// short timeouts if you don't serve large files to prevent DoS attacks.
+
     pub fn output_body_whole_timeout(&mut self, value: Duration) -> &mut Self {
         self.output_body_whole_timeout = value;
         self

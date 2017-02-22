@@ -70,6 +70,10 @@ quick_error! {
         Timeout {
             description("timeout while reading or writing request")
         }
+        Custom(err: Box<::std::error::Error>) {
+            description("custom error")
+            cause(&**err)
+        }
     }
 }
 
@@ -97,5 +101,14 @@ impl ::std::error::Error for Error {
     }
     fn cause(&self) -> Option<&::std::error::Error> {
         self.0.cause()
+    }
+}
+
+impl Error {
+    /// Create an error instance wrapping custom error
+    pub fn custom<E: Into<Box<Error>>>(err: E)
+        -> Error
+    {
+        Error(ErrorEnum::Custom(err.into()))
     }
 }
