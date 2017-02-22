@@ -106,7 +106,7 @@ impl ::std::error::Error for Error {
 
 impl Error {
     /// Create an error instance wrapping custom error
-    pub fn custom<E: Into<Box<Error>>>(err: E)
+    pub fn custom<E: Into<Box<::std::error::Error>>>(err: E)
         -> Error
     {
         Error(ErrorEnum::Custom(err.into()))
