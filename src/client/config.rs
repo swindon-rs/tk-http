@@ -10,7 +10,7 @@ impl Config {
             inflight_request_limit: 1,
             inflight_request_prealloc: 1,
             keep_alive_timeout: Duration::new(4, 0),
-            safe_pipeline_timeout: Duration::from_millis(200),
+            safe_pipeline_timeout: Duration::from_millis(300),
             max_request_timeout: Duration::new(15, 0),
         }
     }
@@ -41,7 +41,7 @@ impl Config {
     /// and client sending new request. So this timeout should usually be less
     /// than keep-alive timeout at server side.
     ///
-    /// Note: default is very much conservative (currently 5 seconds, but we
+    /// Note: default is very much conservative (currently 4 seconds, but we
     /// might change it).
     pub fn keep_alive_timeout(&mut self, dur: Duration) -> &mut Self {
         self.keep_alive_timeout = dur;
@@ -86,6 +86,9 @@ impl Config {
     /// sent requests. So while your business logic will not hang for too
     /// long, connection hangs for `max_request_timeout` time and occupies
     /// connection pool's slot for this time.
+    ///
+    /// Default timeout is 15 seconds (which is both too large for many
+    /// applications and too small for some ones)
     pub fn max_request_timeout(&mut self, dur: Duration) -> &mut Self {
         self.max_request_timeout = dur;
         self
