@@ -18,6 +18,7 @@ pub use self::encoder::{Encoder, EncoderDone};
 pub use self::proto::{Proto};
 
 use std::borrow::Cow;
+use std::time::Duration;
 
 use httparse::Header;
 
@@ -29,6 +30,9 @@ use {Version};
 pub struct Config {
     inflight_request_limit: usize,
     inflight_request_prealloc: usize,
+    keep_alive_timeout: Duration,
+    safe_pipeline_timeout: Duration,
+    max_request_timeout: Duration,
 }
 
 /// A borrowed structure that represents response headers
