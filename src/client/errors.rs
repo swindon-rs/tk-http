@@ -101,6 +101,14 @@ quick_error! {
         InvalidStatus {
             description("unsupported status")
         }
+        /// Request timed out
+        RequestTimeout {
+            description("request timed out")
+        }
+        /// Connection timed out on keep alive
+        KeepAliveTimeout {
+            description("connection timed out beeing on keep-alive")
+        }
     }
 }
 
