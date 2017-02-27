@@ -19,6 +19,9 @@ impl Config {
     ///
     /// Note we always return `NotReady` if some *request* is streaming
     /// currently. Use `Sink::buffered` to prevent that.
+    ///
+    /// Note 2: you might also need to tweak `safe_pipeline_timeout` to
+    /// make pipelining work.
     pub fn inflight_request_limit(&mut self, value: usize) -> &mut Self {
         self.inflight_request_limit = value;
         self

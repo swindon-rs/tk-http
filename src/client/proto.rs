@@ -1,8 +1,9 @@
+use std::collections::VecDeque;
 use std::mem;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
-use std::collections::VecDeque;
-use std::net::SocketAddr;
+use std::time::Instant;
 
 use tk_bufstream::{IoBuf, WriteBuf, ReadBuf};
 use tokio_core::io::Io;
@@ -23,8 +24,14 @@ enum OutState<S: Io, F> {
 
 enum InState<S: Io, C: Codec<S>> {
     Idle(ReadBuf<S>),
-    Read(Parser<S, C>),
+    Read(Parser<S, C>, Instant),
     Void,
+}
+
+struct Waiting<C> {
+    codec: C,
+    state: Arc<AtomicUsize>,  // TODO(tailhook) AtomicU8
+    queued_at: Instant,
 }
 
 /// A low-level HTTP/1.x client protocol handler
@@ -33,7 +40,7 @@ enum InState<S: Io, C: Codec<S>> {
 /// connection pooling on top of this interface
 pub struct Proto<S: Io, C: Codec<S>> {
     writing: OutState<S, C::Future>,
-    waiting: VecDeque<(C, Arc<AtomicUsize>)>,
+    waiting: VecDeque<Waiting<C>>,
     reading: InState<S, C>,
     close: Arc<AtomicBool>,
     config: Arc<Config>,
@@ -76,6 +83,25 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
     fn start_send(&mut self, mut item: Self::SinkItem)
         -> StartSend<Self::SinkItem, Self::SinkError>
     {
+        if self.waiting.len() > 0 {
+            if self.waiting.len() > self.config.inflight_request_limit {
+                // Return right away if limit reached
+                // (but limit is checked later for inflight request again)
+                return Ok(AsyncSink::NotReady(item));
+            }
+            let last = self.waiting.get(0).unwrap();
+            if last.queued_at.elapsed() > self.config.safe_pipeline_timeout {
+                // Return right away if request is being waited for too long
+                // (but limit is checked later for inflight request again)
+                return Ok(AsyncSink::NotReady(item));
+            }
+        }
+        if matches!(self.reading, InState::Read(_, time)
+            if time.elapsed() > self.config.safe_pipeline_timeout)
+        {
+            // Return right away if request is being waited for too long
+            return Ok(AsyncSink::NotReady(item));
+        }
         let (r, st) = match mem::replace(&mut self.writing, OutState::Void) {
             OutState::Idle(mut io) => {
                 if self.close.load(Ordering::SeqCst) {
@@ -88,13 +114,19 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
                         limit -= 1;
                     }
                     if self.waiting.len() >= limit {
+                        // Note: we recheck limit here, because inflight
+                        // request ifluences the limit
                         (AsyncSink::NotReady(item), OutState::Idle(io))
                     } else {
                         let state = Arc::new(AtomicUsize::new(0));
                         let e = encoder::new(io,
                                 state.clone(), self.close.clone());
                         let fut = item.start_write(e);
-                        self.waiting.push_back((item, state));
+                        self.waiting.push_back(Waiting {
+                            codec: item,
+                            state: state,
+                            queued_at: Instant::now(),
+                        });
                         (AsyncSink::Ready, OutState::Write(fut))
                     }
                 }
@@ -134,10 +166,11 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
             let (state, cont) =
                 match mem::replace(&mut self.reading, InState::Void) {
                     InState::Idle(mut io) => {
-                        if let Some((nr, state)) = self.waiting.pop_front() {
+                        if let Some(w) = self.waiting.pop_front() {
+                            let Waiting { codec: nr, state, queued_at } = w;
                             let parser = Parser::new(io, nr,
                                 state, self.close.clone());
-                            (InState::Read(parser), true)
+                            (InState::Read(parser, queued_at), true)
                         } else {
                             // This serves for two purposes:
                             // 1. Detect connection has been closed (i.e.
@@ -153,9 +186,11 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
                             (InState::Idle(io), false)
                         }
                     }
-                    InState::Read(mut parser) => {
+                    InState::Read(mut parser, time) => {
                         match parser.poll()? {
-                            Async::NotReady => (InState::Read(parser), false),
+                            Async::NotReady => {
+                                (InState::Read(parser, time), false)
+                            }
                             Async::Ready(Some(io)) => (InState::Idle(io), true),
                             Async::Ready(None) => {
                                 return Err(Error::Closed);
