@@ -17,7 +17,7 @@ use client::{Codec, Error, Config};
 
 
 enum OutState<S: Io, F> {
-    Idle(WriteBuf<S>),
+    Idle(WriteBuf<S>, Instant),
     Write(F),
     Void,
 }
@@ -54,7 +54,7 @@ impl<S: Io, C: Codec<S>> Proto<S, C> {
     pub fn new(conn: S, cfg: &Arc<Config>) -> Proto<S, C> {
         let (cout, cin) = IoBuf::new(conn).split();
         return Proto {
-            writing: OutState::Idle(cout),
+            writing: OutState::Idle(cout, Instant::now()),
             waiting: VecDeque::with_capacity(cfg.inflight_request_prealloc),
             reading: InState::Idle(cin),
             close: Arc::new(AtomicBool::new(false)),
@@ -103,11 +103,18 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
             return Ok(AsyncSink::NotReady(item));
         }
         let (r, st) = match mem::replace(&mut self.writing, OutState::Void) {
-            OutState::Idle(mut io) => {
+            OutState::Idle(mut io, time) => {
+                if time.elapsed() > self.config.keep_alive_timeout &&
+                    self.waiting.len() == 0 &&
+                    matches!(self.reading, InState::Idle(..))
+                {
+                    // Too dangerous to send request now
+                    return Ok(AsyncSink::NotReady(item));
+                }
                 if self.close.load(Ordering::SeqCst) {
                     // TODO(tailhook) maybe shutdown?
                     io.flush()?;
-                    (AsyncSink::NotReady(item), OutState::Idle(io))
+                    (AsyncSink::NotReady(item), OutState::Idle(io, time))
                 } else {
                     let mut limit = self.config.inflight_request_limit;
                     if matches!(self.reading, InState::Read(..)) {
@@ -116,7 +123,7 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
                     if self.waiting.len() >= limit {
                         // Note: we recheck limit here, because inflight
                         // request ifluences the limit
-                        (AsyncSink::NotReady(item), OutState::Idle(io))
+                        (AsyncSink::NotReady(item), OutState::Idle(io, time))
                     } else {
                         let state = Arc::new(AtomicUsize::new(0));
                         let e = encoder::new(io,
@@ -145,9 +152,15 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
     }
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         self.writing = match mem::replace(&mut self.writing, OutState::Void) {
-            OutState::Idle(mut io) => {
+            OutState::Idle(mut io, time) => {
                 io.flush()?;
-                OutState::Idle(io)
+                if time.elapsed() > self.config.keep_alive_timeout &&
+                    self.waiting.len() == 0 &&
+                    matches!(self.reading, InState::Idle(..))
+                {
+                    return Err(Error::KeepAliveTimeout);
+                }
+                OutState::Idle(io, time)
             }
             // Note we break connection if serializer errored, because
             // we don't actually know if connection can be reused
@@ -156,7 +169,7 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
                 Async::Ready(done) => {
                     let mut io = get_inner(done);
                     io.flush()?;
-                    OutState::Idle(io)
+                    OutState::Idle(io, Instant::now())
                 }
                 Async::NotReady => OutState::Write(fut),
             },
@@ -207,8 +220,8 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
         // Basically we return Ready when there are no in-flight requests,
         // which means we can shutdown connection safefully.
         if self.waiting.len() == 0 &&
-                matches!(self.writing, OutState::Idle(_)) &&
-                matches!(self.reading, InState::Idle(_))
+                matches!(self.writing, OutState::Idle(..)) &&
+                matches!(self.reading, InState::Idle(..))
         {
             return Ok(Async::Ready(()));
         } else {
