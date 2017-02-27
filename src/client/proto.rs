@@ -8,7 +8,7 @@ use std::time::Instant;
 use tk_bufstream::{IoBuf, WriteBuf, ReadBuf};
 use tokio_core::io::Io;
 use tokio_core::net::TcpStream;
-use tokio_core::reactor::Handle;
+use tokio_core::reactor::{Handle, Timeout};
 use futures::{Future, AsyncSink, Async, Sink, StartSend, Poll};
 
 use client::parser::Parser;
@@ -18,7 +18,7 @@ use client::{Codec, Error, Config};
 
 enum OutState<S: Io, F> {
     Idle(WriteBuf<S>, Instant),
-    Write(F),
+    Write(F, Instant),
     Void,
 }
 
@@ -34,11 +34,7 @@ struct Waiting<C> {
     queued_at: Instant,
 }
 
-/// A low-level HTTP/1.x client protocol handler
-///
-/// Note, most of the time you need some reconnection facility and/or
-/// connection pooling on top of this interface
-pub struct Proto<S: Io, C: Codec<S>> {
+pub struct PureProto<S: Io, C: Codec<S>> {
     writing: OutState<S, C::Future>,
     waiting: VecDeque<Waiting<C>>,
     reading: InState<S, C>,
@@ -46,22 +42,39 @@ pub struct Proto<S: Io, C: Codec<S>> {
     config: Arc<Config>,
 }
 
+/// A low-level HTTP/1.x client protocol handler
+///
+/// Note, most of the time you need some reconnection facility and/or
+/// connection pooling on top of this interface
+pub struct Proto<S: Io, C: Codec<S>> {
+    proto: PureProto<S, C>,
+    handle: Handle,
+    timeout: Timeout,
+}
+
 
 impl<S: Io, C: Codec<S>> Proto<S, C> {
     /// Create a new protocol implementation from a TCP connection and a config
     ///
     /// You should use this protocol as a `Sink`
-    pub fn new(conn: S, cfg: &Arc<Config>) -> Proto<S, C> {
+    pub fn new(conn: S, handle: &Handle, cfg: &Arc<Config>) -> Proto<S, C> {
         let (cout, cin) = IoBuf::new(conn).split();
-        return Proto {
-            writing: OutState::Idle(cout, Instant::now()),
-            waiting: VecDeque::with_capacity(cfg.inflight_request_prealloc),
-            reading: InState::Idle(cin),
-            close: Arc::new(AtomicBool::new(false)),
-            config: cfg.clone(),
+        Proto {
+            proto: PureProto {
+                writing: OutState::Idle(cout, Instant::now()),
+                waiting: VecDeque::with_capacity(
+                    cfg.inflight_request_prealloc),
+                reading: InState::Idle(cin),
+                close: Arc::new(AtomicBool::new(false)),
+                config: cfg.clone(),
+            },
+            handle: handle.clone(),
+            timeout: Timeout::new(cfg.keep_alive_timeout, &handle)
+                .expect("can always create a timeout"),
         }
     }
 }
+
 impl<C: Codec<TcpStream>> Proto<TcpStream, C> {
     /// A convenience method to establish connection and create a protocol
     /// instance
@@ -69,15 +82,95 @@ impl<C: Codec<TcpStream>> Proto<TcpStream, C> {
         -> Box<Future<Item=Self, Error=Error>>
     {
         let cfg = cfg.clone();
+        let handle = handle.clone();
         Box::new(
             TcpStream::connect(&addr, &handle)
-            .map(move |c| Proto::new(c, &cfg))
+            .map(move |c| Proto::new(c, &handle, &cfg))
             .map_err(Error::Io))
         as Box<Future<Item=_, Error=_>>
     }
 }
-
 impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
+    type SinkItem = C;
+    type SinkError = Error;
+    fn start_send(&mut self, item: Self::SinkItem)
+        -> StartSend<Self::SinkItem, Self::SinkError>
+    {
+        let old_timeout = self.proto.get_timeout();
+        let res = self.proto.start_send(item)?;
+        let new_timeout = self.proto.get_timeout();
+        if old_timeout != new_timeout {
+            self.timeout = Timeout::new(new_timeout - Instant::now(),
+                                        &self.handle)
+                .expect("can always add a timeout");
+            let timeo = self.timeout.poll()
+                .expect("timeout can't fail on poll");
+            match timeo {
+                // it shouldn't be keep-alive timeout, but have to check
+                Async::Ready(()) => {
+                    match res {
+                        // don't discard request
+                        AsyncSink::NotReady(..) => {}
+                        // can return error (can it happen?)
+                        // TODO(tailhook) it's strange that this can happen
+                        AsyncSink::Ready => {
+                            return Err(Error::RequestTimeout.into());
+                        }
+                    }
+                }
+                Async::NotReady => {}
+            }
+        }
+        Ok(res)
+    }
+    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
+        let old_timeout = self.proto.get_timeout();
+        let res = self.proto.poll_complete()?;
+        let new_timeout = self.proto.get_timeout();
+        if old_timeout != new_timeout {
+            self.timeout = Timeout::new(new_timeout - Instant::now(),
+                                        &self.handle)
+                .expect("can always add a timeout");
+            let timeo = self.timeout.poll()
+                .expect("timeout can't fail on poll");
+            match timeo {
+                // it shouldn't be keep-alive timeout, but have to check
+                Async::Ready(()) => return Err(Error::RequestTimeout.into()),
+                Async::NotReady => {},
+            }
+        }
+        Ok(res)
+    }
+}
+
+impl<S: Io, C: Codec<S>> PureProto<S, C> {
+    fn get_timeout(&self) -> Instant {
+        match self.writing {
+            OutState::Idle(_, time) => {
+                if self.waiting.len() == 0 {
+                    match self.reading {
+                        InState::Idle(..) => {
+                            return time + self.config.keep_alive_timeout;
+                        }
+                        InState::Read(_, time) => {
+                            return time + self.config.max_request_timeout;
+                        }
+                        InState::Void => unreachable!(),
+                    }
+                } else {
+                    let req = self.waiting.get(0).unwrap();
+                    return req.queued_at + self.config.max_request_timeout;
+                }
+            }
+            OutState::Write(_, time) => {
+                return time + self.config.max_request_timeout;
+            }
+            OutState::Void => unreachable!(),
+        }
+    }
+}
+
+impl<S: Io, C: Codec<S>> Sink for PureProto<S, C> {
     type SinkItem = C;
     type SinkError = Error;
     fn start_send(&mut self, mut item: Self::SinkItem)
@@ -134,16 +227,17 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
                             state: state,
                             queued_at: Instant::now(),
                         });
-                        (AsyncSink::Ready, OutState::Write(fut))
+                        (AsyncSink::Ready,
+                         OutState::Write(fut, Instant::now()))
                     }
                 }
             }
-            OutState::Write(fut) => {
+            OutState::Write(fut, start) => {
                 // TODO(tailhook) should we check "close"?
                 // Points:
                 // * Performance
                 // * Dropping future
-                (AsyncSink::NotReady(item), OutState::Write(fut))
+                (AsyncSink::NotReady(item), OutState::Write(fut, start))
             }
             OutState::Void => unreachable!(),
         };
@@ -165,13 +259,13 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
             // Note we break connection if serializer errored, because
             // we don't actually know if connection can be reused
             // safefully in this case
-            OutState::Write(mut fut) => match fut.poll()? {
+            OutState::Write(mut fut, start) => match fut.poll()? {
                 Async::Ready(done) => {
                     let mut io = get_inner(done);
                     io.flush()?;
-                    OutState::Idle(io, Instant::now())
+                    OutState::Idle(io, start)
                 }
-                Async::NotReady => OutState::Write(fut),
+                Async::NotReady => OutState::Write(fut, start),
             },
             OutState::Void => unreachable!(),
         };

@@ -31,6 +31,7 @@ pub fn fetch_once_buffered(url: Url, handle: &Handle)
     -> Box<Future<Item=Response, Error=Error>>
 {
     let handle = handle.clone();
+    let h2 = handle.clone();
     if !url.has_host() || url.scheme() != "http" {
         return Box::new(Err(Error::UnsupportedScheme).into_future());
     }
@@ -55,9 +56,9 @@ pub fn fetch_once_buffered(url: Url, handle: &Handle)
         addr.pick_one().ok_or(NsError::NameNotFound).map_err(Error::Name)
     }).and_then(move |addr| {
         TcpStream::connect(&addr, &handle).map_err(Error::Io)
-    }).and_then(|sock| {
+    }).and_then(move |sock| {
         let (codec, receiver) = Buffered::get(url);
-        let proto = Proto::new(sock, &Arc::new(Config::new()));
+        let proto = Proto::new(sock, &h2, &Arc::new(Config::new()));
         proto.send(codec)
         .join(receiver.map_err(|_| -> Error { unimplemented!() }))
         .map_err(|e| e)

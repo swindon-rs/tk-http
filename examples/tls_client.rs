@@ -36,6 +36,7 @@ pub fn main() {
 
     let mut lp = tokio_core::reactor::Core::new().expect("loop created");
     let handle = lp.handle();
+    let h2 = lp.handle();
     let addr = ("google.com", 443).to_socket_addrs()
         .expect("resolve address").next().expect("at least one IP");
     let config = Arc::new({
@@ -53,7 +54,7 @@ pub fn main() {
         .and_then(move |sock| {
             let (codec, receiver) = Buffered::get(
                 "https://rust-lang.org".parse().unwrap());
-            let proto = Proto::new(sock, &Arc::new(Config::new()));
+            let proto = Proto::new(sock, &h2, &Arc::new(Config::new()));
             proto.send(codec)
             .join(receiver.map_err(|_| -> Error { unimplemented!() }))
             .map_err(|e| e)
