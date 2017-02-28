@@ -11,6 +11,7 @@ use tk_bufstream::{ReadBuf, Buf};
 
 use enums::Version;
 use client::client::{BodyKind};
+use client::errors::ErrorEnum;
 use client::recv_mode::Mode;
 use headers;
 use chunked;
@@ -46,7 +47,7 @@ pub struct Parser<S: Io, C: Codec<S>> {
 
 
 fn scan_headers<'x>(is_head: bool, code: u16, headers: &'x [httparse::Header])
-    -> Result<(BodyKind, Option<Cow<'x, str>>, bool), Error>
+    -> Result<(BodyKind, Option<Cow<'x, str>>, bool), ErrorEnum>
 {
     /// Implements the body length algorithm for requests:
     /// http://httpwg.github.io/specs/rfc7230.html#message.body.length
@@ -58,7 +59,7 @@ fn scan_headers<'x>(is_head: bool, code: u16, headers: &'x [httparse::Header])
     /// 3. If Content-Length -> Fixed
     /// 4. Else Eof
     use client::client::BodyKind::*;
-    use client::errors::Error::ConnectionInvalid;
+    use client::errors::ErrorEnum::ConnectionInvalid;
     let mut has_content_length = false;
     let mut connection = None::<Cow<_>>;
     let mut close = false;
@@ -94,14 +95,14 @@ fn scan_headers<'x>(is_head: bool, code: u16, headers: &'x [httparse::Header])
         } else if header.name.eq_ignore_ascii_case("Content-Length") {
             if has_content_length {
                 // duplicate content_length
-                return Err(Error::DuplicateContentLength);
+                return Err(ErrorEnum::DuplicateContentLength);
             }
             has_content_length = true;
             if result != Chunked {
                 let s = from_utf8(header.value)
-                    .map_err(|_| Error::BadContentLength)?;
+                    .map_err(|_| ErrorEnum::BadContentLength)?;
                 let len = s.parse()
-                    .map_err(|_| Error::BadContentLength)?;
+                    .map_err(|_| ErrorEnum::BadContentLength)?;
                 result = Fixed(len);
             } else {
                 // tralsfer-encoding has preference and don't allow keep-alive
@@ -123,11 +124,11 @@ fn scan_headers<'x>(is_head: bool, code: u16, headers: &'x [httparse::Header])
 }
 
 fn new_body(mode: BodyKind, recv_mode: Mode)
-    -> Result<BodyProgress, Error>
+    -> Result<BodyProgress, ErrorEnum>
 {
     use super::client::BodyKind as B;
     use super::recv_mode::Mode as M;
-    use super::Error::*;
+    use client::errors::ErrorEnum::*;
     use body_parser::BodyProgress as P;
     match (mode, recv_mode) {
         // TODO(tailhook) check size < usize
@@ -155,7 +156,7 @@ fn parse_headers<S: Io, C: Codec<S>>(
                 raw = httparse::Response::new(&mut vec);
                 result = raw.parse(&buffer[..]);
             }
-            match result? {
+            match result.map_err(ErrorEnum::Header)? {
                 httparse::Status::Complete(bytes) => {
                     let ver = raw.version.unwrap();
                     let code = raw.code.unwrap();
@@ -214,16 +215,16 @@ impl<S: Io, C: Codec<S>> Parser<S, C> {
                 ref close_signal,
             } = self.state
         {
-            if io.read()? == 0 {
+            if io.read().map_err(ErrorEnum::Io)? == 0 {
                 if io.done() {
-                    return Err(Error::ResetOnResponseHeaders);
+                    return Err(ErrorEnum::ResetOnResponseHeaders.into());
                 } else {
                     return Ok(Async::NotReady);
                 }
             }
             let reqs = request_state.load(Ordering::SeqCst);
             if reqs == RequestState::Empty as usize {
-                return Err(Error::PrematureResponseHeaders);
+                return Err(ErrorEnum::PrematureResponseHeaders.into());
             }
             let is_head = reqs == RequestState::StartedHead as usize;
             match parse_headers(&mut io.in_buf, &mut self.codec, is_head)? {
@@ -246,7 +247,7 @@ impl<S: Io, C: Codec<S>> Parser<S, C> {
             match self.state {
                 Headers {..} => unreachable!(),
                 Body { ref mode, ref mut progress } => {
-                    progress.parse(&mut io)?;
+                    progress.parse(&mut io).map_err(ErrorEnum::ChunkSize)?;
                     let (bytes, done) = progress.check_buf(&io);
                     let operation = if done {
                         Some(self.codec.data_received(
@@ -254,7 +255,7 @@ impl<S: Io, C: Codec<S>> Parser<S, C> {
                     } else if io.done() {
                         /// If it's ReadUntilEof it will be detected in
                         /// check_buf so we can safefully put error here
-                        return Err(Error::ResetOnResponseBody);
+                        return Err(ErrorEnum::ResetOnResponseBody.into());
                     } else if matches!(*mode, Progressive(x) if x <= bytes) {
                         Some(self.codec.data_received(
                             &io.in_buf[..bytes], false)?)
@@ -277,7 +278,7 @@ impl<S: Io, C: Codec<S>> Parser<S, C> {
                     }
                 }
             }
-            if io.read()? == 0 {
+            if io.read().map_err(ErrorEnum::Io)? == 0 {
                 if io.done() {
                     continue;
                 } else {

@@ -8,10 +8,8 @@ mod head;
 mod parser;
 mod proto;
 mod recv_mode;
-mod simple;
 pub mod buffered;
 
-pub use self::simple::fetch_once_buffered;
 pub use self::errors::Error;
 pub use self::client::{Client, Codec};
 pub use self::encoder::{Encoder, EncoderDone};

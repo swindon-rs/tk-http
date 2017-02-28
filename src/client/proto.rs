@@ -13,6 +13,7 @@ use futures::{Future, AsyncSink, Async, Sink, StartSend, Poll};
 
 use client::parser::Parser;
 use client::encoder::{self, get_inner};
+use client::errors::ErrorEnum;
 use client::{Codec, Error, Config};
 
 
@@ -86,7 +87,7 @@ impl<C: Codec<TcpStream>> Proto<TcpStream, C> {
         Box::new(
             TcpStream::connect(&addr, &handle)
             .map(move |c| Proto::new(c, &handle, &cfg))
-            .map_err(Error::Io))
+            .map_err(ErrorEnum::Io).map_err(Error::from))
         as Box<Future<Item=_, Error=_>>
     }
 }
@@ -114,7 +115,7 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
                         // can return error (can it happen?)
                         // TODO(tailhook) it's strange that this can happen
                         AsyncSink::Ready => {
-                            return Err(Error::RequestTimeout.into());
+                            return Err(ErrorEnum::RequestTimeout.into());
                         }
                     }
                 }
@@ -135,7 +136,9 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
                 .expect("timeout can't fail on poll");
             match timeo {
                 // it shouldn't be keep-alive timeout, but have to check
-                Async::Ready(()) => return Err(Error::RequestTimeout.into()),
+                Async::Ready(()) => {
+                    return Err(ErrorEnum::RequestTimeout.into());
+                }
                 Async::NotReady => {},
             }
         }
@@ -206,7 +209,7 @@ impl<S: Io, C: Codec<S>> Sink for PureProto<S, C> {
                 }
                 if self.close.load(Ordering::SeqCst) {
                     // TODO(tailhook) maybe shutdown?
-                    io.flush()?;
+                    io.flush().map_err(ErrorEnum::Io)?;
                     (AsyncSink::NotReady(item), OutState::Idle(io, time))
                 } else {
                     let mut limit = self.config.inflight_request_limit;
@@ -247,12 +250,12 @@ impl<S: Io, C: Codec<S>> Sink for PureProto<S, C> {
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         self.writing = match mem::replace(&mut self.writing, OutState::Void) {
             OutState::Idle(mut io, time) => {
-                io.flush()?;
+                io.flush().map_err(ErrorEnum::Io)?;
                 if time.elapsed() > self.config.keep_alive_timeout &&
                     self.waiting.len() == 0 &&
                     matches!(self.reading, InState::Idle(..))
                 {
-                    return Err(Error::KeepAliveTimeout);
+                    return Err(ErrorEnum::KeepAliveTimeout.into());
                 }
                 OutState::Idle(io, time)
             }
@@ -262,7 +265,7 @@ impl<S: Io, C: Codec<S>> Sink for PureProto<S, C> {
             OutState::Write(mut fut, start) => match fut.poll()? {
                 Async::Ready(done) => {
                     let mut io = get_inner(done);
-                    io.flush()?;
+                    io.flush().map_err(ErrorEnum::Io)?;
                     OutState::Idle(io, start)
                 }
                 Async::NotReady => OutState::Write(fut, start),
@@ -284,11 +287,12 @@ impl<S: Io, C: Codec<S>> Sink for PureProto<S, C> {
                             //    we need to call `poll_read()` every time)
                             // 2. Detect premature bytes (we didn't sent
                             //    a request yet, but there is a response)
-                            if io.read()? != 0 {
-                                return Err(Error::PrematureResponseHeaders);
+                            if io.read().map_err(ErrorEnum::Io)? != 0 {
+                                return Err(
+                                    ErrorEnum::PrematureResponseHeaders.into());
                             }
                             if io.done() {
-                                return Err(Error::Closed);
+                                return Err(ErrorEnum::Closed.into());
                             }
                             (InState::Idle(io), false)
                         }
@@ -300,7 +304,7 @@ impl<S: Io, C: Codec<S>> Sink for PureProto<S, C> {
                             }
                             Async::Ready(Some(io)) => (InState::Idle(io), true),
                             Async::Ready(None) => {
-                                return Err(Error::Closed);
+                                return Err(ErrorEnum::Closed.into());
                             }
                         }
                     }

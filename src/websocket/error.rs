@@ -1,6 +1,8 @@
 use std::io;
 use std::str::{Utf8Error};
 
+use httparse;
+
 
 quick_error! {
     /// Websocket error
@@ -46,6 +48,15 @@ quick_error! {
         /// that already closed
         Closed {
             description("Forced connection close")
+        }
+        /// Error parsing http headers
+        HeaderError(err: httparse::Error) {
+            description("parse error")
+            display("parse error: {:?}", err)
+            from()
+        }
+        PrematureResponseHeaders {
+            description("response headers before request are sent")
         }
     }
 }

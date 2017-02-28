@@ -4,6 +4,7 @@ use futures::{Async, AsyncSink, Future, IntoFuture};
 use tokio_core::io::Io;
 
 use client::{Error, Encoder, EncoderDone, Head, RecvMode};
+use client::errors::ErrorEnum;
 use client::buffered;
 
 
@@ -136,16 +137,19 @@ impl<T, S: Io> Client<S, FutureResult<EncoderDone<S>, Error>> for T
     {
         let url = match url.parse() {
             Ok(u) => u,
-            Err(_) => return Box::new(Err(Error::InvalidUrl).into_future()),
+            Err(_) => {
+                return Box::new(Err(ErrorEnum::InvalidUrl.into())
+                    .into_future());
+            }
         };
         let (codec, receiver) = buffered::Buffered::get(url);
         match self.start_send(Box::new(codec)) {
             Ok(AsyncSink::NotReady(_)) => {
-                Box::new(Err(Error::Busy.into()).into_future())
+                Box::new(Err(ErrorEnum::Busy.into()).into_future())
             }
             Ok(AsyncSink::Ready) => {
                 Box::new(receiver
-                    .map_err(|_| Error::Canceled.into())
+                    .map_err(|_| ErrorEnum::Canceled.into())
                     .and_then(|res| res))
             }
             Err(e) => {

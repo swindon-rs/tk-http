@@ -1,25 +1,23 @@
-
 use std::io;
+use std::fmt;
+use std::convert::From;
 
 use futures::sync::mpsc::SendError;
 use httparse::Error as HttpError;
 use httparse::InvalidChunkSize;
-use abstract_ns::Error as NsError;
+
+
+/// HTTP client error
+pub struct Error(ErrorEnum);
 
 
 quick_error! {
     #[derive(Debug)]
     /// Client request error
-    pub enum Error {
+    pub enum ErrorEnum {
         /// Scheme url is not supported, only returned by "simple" interface
         UnsupportedScheme {
             description("scheme of this url is not supported")
-        }
-        /// Name resolution error, only returned by "simple" interface for now
-        Name(err: NsError) {
-            description("name resolution error")
-            display("name resolution error: {}", err)
-            from()
         }
         /// I/O (basically networking) error occured during request
         Io(err: io::Error) {
@@ -109,11 +107,51 @@ quick_error! {
         KeepAliveTimeout {
             description("connection timed out beeing on keep-alive")
         }
+        Custom(err: Box<::std::error::Error>) {
+            description("custom error")
+            cause(&**err)
+        }
     }
 }
 
-impl<T> From<SendError<T>> for Error {
-    fn from(_: SendError<T>) -> Error {
-        Error::PoolError
+impl<T> From<SendError<T>> for ErrorEnum {
+    fn from(_: SendError<T>) -> ErrorEnum {
+        ErrorEnum::PoolError
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+impl From<ErrorEnum> for Error {
+    fn from(err: ErrorEnum) -> Self {
+        Error(err)
+    }
+}
+
+impl ::std::error::Error for Error {
+    fn description(&self) -> &str {
+        self.0.description()
+    }
+    fn cause(&self) -> Option<&::std::error::Error> {
+        self.0.cause()
+    }
+}
+
+impl Error {
+    /// Create an error instance wrapping custom error
+    pub fn custom<E: Into<Box<::std::error::Error>>>(err: E)
+        -> Error
+    {
+        Error(ErrorEnum::Custom(err.into()))
     }
 }

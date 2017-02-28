@@ -1,5 +1,5 @@
 //! Simple HTTP service based on `tokio` tools
-#![recursion_limit="100"]
+#![recursion_limit="200"]
 #![warn(missing_docs)]
 
 extern crate futures;
@@ -14,10 +14,6 @@ extern crate byteorder;
 #[macro_use(quick_error)] extern crate quick_error;
 #[macro_use] extern crate matches;
 #[macro_use] extern crate log;
-// These ones for "simple" interface
-extern crate abstract_ns;
-extern crate futures_cpupool;
-extern crate ns_std_threaded;
 
 
 pub mod server;

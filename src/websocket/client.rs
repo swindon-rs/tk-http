@@ -10,7 +10,7 @@ use tokio_core::io::Io;
 
 use base_serializer::{MessageState, HeaderError};
 // TODO(tailhook) change the error
-use client::{Error};
+use websocket::{Error};
 use enums::{Version, Status};
 use websocket::{ClientCodec, Key};
 
@@ -276,7 +276,7 @@ impl<S: Io, A> Future for HandshakeProto<S, A>
         self.output.as_mut().expect("poll after complete").flush()?;
         self.input.as_mut().expect("poll after complete").read()?;
         if self.input.as_mut().expect("poll after complete").done() {
-            return Err(Error::PrematureResponseHeaders);
+            return Err(Error::PrematureResponseHeaders.into());
         }
         match self.parse_headers()? {
             Some(x) => {

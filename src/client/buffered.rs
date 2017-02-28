@@ -18,6 +18,7 @@ use tokio_core::io::Io;
 use enums::Status;
 use enums::Version;
 use client::{Error, Codec, Encoder, EncoderDone, Head, RecvMode};
+use client::errors::ErrorEnum;
 
 /// Fully buffered (in-memory) writing request and reading response
 ///
@@ -64,7 +65,8 @@ impl<S: Io> Codec<S> for Buffered {
         ok(e.done())
     }
     fn headers_received(&mut self, headers: &Head) -> Result<RecvMode, Error> {
-        let status = headers.status().ok_or(Error::InvalidStatus)?;
+        let status = headers.status()
+            .ok_or(ErrorEnum::InvalidStatus)?;
         self.response = Some(Response {
             status: status,
             headers: headers.headers().map(|(k, v)| {
