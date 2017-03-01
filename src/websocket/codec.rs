@@ -1,8 +1,9 @@
 use std::io;
 use tk_bufstream::{Buf, Encode, Decode};
 
-use super::{Packet};
-use super::zero_copy::{parse_frame, write_packet, write_close};
+use websocket::{Packet};
+use websocket::zero_copy::{parse_frame, write_packet, write_close};
+use websocket::error::Error;
 
 
 const MAX_PACKET_SIZE: usize = 10 << 20;
@@ -38,7 +39,9 @@ impl Decode for ServerCodec {
     type Item = Packet;
     fn decode(&mut self, buf: &mut Buf) -> Result<Option<Packet>, io::Error> {
         let parse_result = parse_frame(buf, MAX_PACKET_SIZE, true)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?
+            // TODO(tailhook) fix me when error type in bufstream
+            // is associated type
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, Error::from(e)))?
             .map(|(p, b)| (p.into(), b));
         if let Some((p, b)) = parse_result {
             buf.consume(b);

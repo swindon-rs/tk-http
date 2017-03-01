@@ -4,7 +4,8 @@ use rand::{thread_rng, Rng};
 use tk_bufstream::Buf;
 use byteorder::{BigEndian, ByteOrder};
 
-use super::{Error, Packet};
+use super::{Packet};
+use websocket::error::ErrorEnum;
 
 
 /// A borrowed frame of websocket data
@@ -52,7 +53,7 @@ impl<'a> Into<Packet> for &'a Frame<'a> {
 
 
 pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize, masked: bool)
-    -> Result<Option<(Frame<'x>, usize)>, Error>
+    -> Result<Option<(Frame<'x>, usize)>, ErrorEnum>
 {
     use self::Frame::*;
 
@@ -77,7 +78,7 @@ pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize, masked: bool)
         }
     };
     if size > limit as u64 {
-        return Err(Error::TooLong);
+        return Err(ErrorEnum::TooLong);
     }
     let size = size as usize;
     let start = fsize + if masked { 4 } else { 0 } /* mask size */;
@@ -90,10 +91,10 @@ pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize, masked: bool)
     // TODO(tailhook) should we assert that reserved bits are zero?
     let mask = buf[1] & 0x80 != 0;
     if !fin {
-        return Err(Error::Fragmented);
+        return Err(ErrorEnum::Fragmented);
     }
     if mask != masked {
-        return Err(Error::Unmasked);
+        return Err(ErrorEnum::Unmasked);
     }
     if mask {
         let mask = [buf[start-4], buf[start-3], buf[start-2], buf[start-1]];
@@ -109,7 +110,7 @@ pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize, masked: bool)
         0x2 => Binary(data),
         // TODO(tailhook) implement shutdown packets
         0x8 => Close(BigEndian::read_u16(&data[..2]), from_utf8(&data[2..])?),
-        x => return Err(Error::InvalidOpcode(x)),
+        x => return Err(ErrorEnum::InvalidOpcode(x)),
     };
     return Ok(Some((frame, start + size)));
 }

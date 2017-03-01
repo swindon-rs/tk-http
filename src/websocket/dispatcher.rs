@@ -9,6 +9,7 @@ use tk_bufstream::{ReadFramed, WriteFramed, ReadBuf, WriteBuf};
 use tk_bufstream::{Encode};
 
 use websocket::{Frame, Config, Packet, Error, ServerCodec, ClientCodec};
+use websocket::error::ErrorEnum;
 use websocket::zero_copy::{parse_frame, write_packet, write_close};
 
 
@@ -209,7 +210,7 @@ impl<S: Io, T, D, E> Future for Loop<S, T, D>
     fn poll(&mut self) -> Result<Async<()>, Error> {
         self.read_stream()
             .map_err(|e| error!("Can't read from stream: {}", e)).ok();
-        self.output.flush()?;
+        self.output.flush().map_err(ErrorEnum::Io)?;
         if self.state == LoopState::Done {
             return Ok(Async::Ready(()));
         }
@@ -271,7 +272,7 @@ impl<S: Io, T, D, E> Future for Loop<S, T, D>
                     }
                 }
             }
-            match self.input.read()? {
+            match self.input.read().map_err(ErrorEnum::Io)? {
                 0 => {
                     if self.input.done() {
                         return Ok(Async::Ready(()));

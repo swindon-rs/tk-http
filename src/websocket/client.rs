@@ -11,6 +11,7 @@ use tokio_core::io::Io;
 use base_serializer::{MessageState, HeaderError};
 // TODO(tailhook) change the error
 use websocket::{Error};
+use websocket::error::ErrorEnum;
 use enums::{Version, Status};
 use websocket::{ClientCodec, Key};
 
@@ -239,7 +240,7 @@ impl<S: Io, A: Authorizer<S>> HandshakeProto<S, A> {
                     raw = httparse::Response::new(&mut vec);
                     result = raw.parse(&buf[..]);
                 }
-                match result? {
+                match result.map_err(ErrorEnum::HeaderError)? {
                     httparse::Status::Complete(bytes) => {
                         let ver = raw.version.unwrap();
                         if ver != 1 {
@@ -273,10 +274,12 @@ impl<S: Io, A> Future for HandshakeProto<S, A>
                  A::Result);
     type Error = Error;
     fn poll(&mut self) -> Result<Async<Self::Item>, Error> {
-        self.output.as_mut().expect("poll after complete").flush()?;
-        self.input.as_mut().expect("poll after complete").read()?;
+        self.output.as_mut().expect("poll after complete")
+            .flush().map_err(ErrorEnum::Io)?;
+        self.input.as_mut().expect("poll after complete")
+            .read().map_err(ErrorEnum::Io)?;
         if self.input.as_mut().expect("poll after complete").done() {
-            return Err(Error::PrematureResponseHeaders.into());
+            return Err(ErrorEnum::PrematureResponseHeaders.into());
         }
         match self.parse_headers()? {
             Some(x) => {

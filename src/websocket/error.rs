@@ -1,13 +1,17 @@
 use std::io;
+use std::fmt;
 use std::str::{Utf8Error};
 
 use httparse;
+
+/// Websocket Error works both for client and server connections
+pub struct Error(ErrorEnum);
 
 
 quick_error! {
     /// Websocket error
     #[derive(Debug)]
-    pub enum Error {
+    pub enum ErrorEnum {
         /// Socket IO error
         Io(err: io::Error) {
             description("IO error")
@@ -58,5 +62,45 @@ quick_error! {
         PrematureResponseHeaders {
             description("response headers before request are sent")
         }
+        Custom(err: Box<::std::error::Error + Send + Sync>) {
+            description("custom error")
+            cause(&**err)
+        }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+impl From<ErrorEnum> for Error {
+    fn from(err: ErrorEnum) -> Self {
+        Error(err)
+    }
+}
+
+impl ::std::error::Error for Error {
+    fn description(&self) -> &str {
+        self.0.description()
+    }
+    fn cause(&self) -> Option<&::std::error::Error> {
+        self.0.cause()
+    }
+}
+
+impl Error {
+    /// Create an error instance wrapping custom error
+    pub fn custom<E: Into<Box<::std::error::Error + Send + Sync>>>(err: E)
+        -> Error
+    {
+        Error(ErrorEnum::Custom(err.into()))
     }
 }
