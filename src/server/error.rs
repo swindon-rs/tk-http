@@ -70,7 +70,7 @@ quick_error! {
         Timeout {
             description("timeout while reading or writing request")
         }
-        Custom(err: Box<::std::error::Error>) {
+        Custom(err: Box<::std::error::Error + Send + Sync>) {
             description("custom error")
             cause(&**err)
         }
@@ -106,9 +106,15 @@ impl ::std::error::Error for Error {
 
 impl Error {
     /// Create an error instance wrapping custom error
-    pub fn custom<E: Into<Box<::std::error::Error>>>(err: E)
+    pub fn custom<E: Into<Box<::std::error::Error + Send + Sync>>>(err: E)
         -> Error
     {
         Error(ErrorEnum::Custom(err.into()))
     }
+}
+
+#[test]
+fn send_sync() {
+    fn send_sync<T: Send+Sync>(_: T) {}
+    send_sync(Error::from(ErrorEnum::Timeout));
 }

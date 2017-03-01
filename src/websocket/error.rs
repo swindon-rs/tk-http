@@ -104,3 +104,9 @@ impl Error {
         Error(ErrorEnum::Custom(err.into()))
     }
 }
+
+#[test]
+fn send_sync() {
+    fn send_sync<T: Send+Sync>(_: T) {}
+    send_sync(Error::from(ErrorEnum::TooLong));
+}

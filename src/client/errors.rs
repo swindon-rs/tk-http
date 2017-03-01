@@ -15,10 +15,6 @@ quick_error! {
     #[derive(Debug)]
     /// Client request error
     pub enum ErrorEnum {
-        /// Scheme url is not supported, only returned by "simple" interface
-        UnsupportedScheme {
-            description("scheme of this url is not supported")
-        }
         /// I/O (basically networking) error occured during request
         Io(err: io::Error) {
             description("IO error")
@@ -107,7 +103,7 @@ quick_error! {
         KeepAliveTimeout {
             description("connection timed out beeing on keep-alive")
         }
-        Custom(err: Box<::std::error::Error>) {
+        Custom(err: Box<::std::error::Error + Send + Sync>) {
             description("custom error")
             cause(&**err)
         }
@@ -149,9 +145,15 @@ impl ::std::error::Error for Error {
 
 impl Error {
     /// Create an error instance wrapping custom error
-    pub fn custom<E: Into<Box<::std::error::Error>>>(err: E)
+    pub fn custom<E: Into<Box<::std::error::Error + Send + Sync>>>(err: E)
         -> Error
     {
         Error(ErrorEnum::Custom(err.into()))
     }
+}
+
+#[test]
+fn send_sync() {
+    fn send_sync<T: Send+Sync>(_: T) {}
+    send_sync(Error::from(ErrorEnum::Canceled));
 }
