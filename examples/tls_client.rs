@@ -14,17 +14,12 @@ use std::env;
 use std::fs::File;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
-use std::time::Duration;
 
-use url::Url;
-use futures::future::{FutureResult, ok};
-use futures::{Future, Stream, Sink};
-use futures::sync::mpsc::unbounded;
+use futures::{Future, Sink};
 use rustls::ClientConfig;
 use tokio_core::net::TcpStream;
-use tokio_core::reactor::{Timeout};
 use tokio_rustls::ClientConfigExt;
-use minihttp::client::buffered::{Buffered, Response};
+use minihttp::client::buffered::{Buffered};
 use minihttp::client::{Proto, Config, Error};
 
 

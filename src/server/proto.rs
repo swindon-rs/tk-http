@@ -376,8 +376,8 @@ impl<S: Io, D: Dispatcher<S>> Future for Proto<S, D> {
 mod test {
     use std::sync::Arc;
 
-    use futures::{Empty, Async, Future, empty};
-    use tk_bufstream::{MockData, IoBuf, ReadBuf, WriteBuf};
+    use futures::{Empty, Async, empty};
+    use tk_bufstream::{MockData, ReadBuf, WriteBuf};
 
     use super::PureProto;
     use server::{Config, Dispatcher, Codec};
@@ -392,7 +392,7 @@ mod test {
     impl Dispatcher<MockData> for MockDisp {
         type Codec = MockCodec;
 
-        fn headers_received(&mut self, headers: &Head)
+        fn headers_received(&mut self, _headers: &Head)
             -> Result<Self::Codec, Error>
         {
             Ok(MockCodec {})
@@ -411,12 +411,13 @@ mod test {
             assert_eq!(data.len(), 0);
             Ok(Async::Ready(0))
         }
-        fn start_response(&mut self, e: Encoder<MockData>) -> Self::ResponseFuture
+        fn start_response(&mut self, _e: Encoder<MockData>)
+            -> Self::ResponseFuture
         {
             empty()
         }
-        fn hijack(&mut self, write_buf: WriteBuf<MockData>,
-                             read_buf: ReadBuf<MockData>){
+        fn hijack(&mut self, _write_buf: WriteBuf<MockData>,
+                             _read_buf: ReadBuf<MockData>){
             unimplemented!();
         }
     }
