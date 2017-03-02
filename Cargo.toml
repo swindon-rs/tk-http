@@ -1,7 +1,9 @@
 [package]
 name = "minihttp"
 version = "0.1.0"
-authors = ["Alexey Popravka <alexey.popravka@horsedevel.com>"]
+authors = [
+    "Alexey Popravka <alexey.popravka@horsedevel.com>",
+    "Paul Colomiets <paul@colomiets.name>"]
 
 [dependencies]
 
