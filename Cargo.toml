@@ -18,7 +18,8 @@ categories = [
     "web-programming::http-server",
     "web-programming::websocket",
     ]
-homepage = "http://github.com/tailhook/tk-http"
+homepage = "https://github.com/swindon-rs/tk-http/"
+repository = "https://github.com/swindon-rs/tk-http/"
 documentation = "http://docs.rs/tk-http"
 
 [dependencies]
