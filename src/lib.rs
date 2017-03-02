@@ -1,4 +1,12 @@
-//! Simple HTTP service based on `tokio` tools
+//! This crate contains implementation of HTTP/1.0 and HTTP/1.1 with
+//! websockets support. (HTTP/2 support is planned)
+//!
+//! See [examples](https://github.com/swindon-rs/tk-http/tree/master/examples)
+//! for usage examples.
+//!
+//! For client implementation it's recommended to use the library
+//! together with [tk-pool](https://crates.io/crates/tk-pool).
+//!
 #![recursion_limit="200"]
 #![warn(missing_docs)]
 
