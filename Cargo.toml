@@ -1,6 +1,10 @@
 [package]
 name = "tk-http"
 version = "0.1.0"
+description = """
+    A full-features asynchronous HTTP implementation for tokio-rs stack,
+    including websockets.
+"""
 authors = [
     "Alexey Popravka <alexey.popravka@horsedevel.com>",
     "Paul Colomiets <paul@colomiets.name>"]
