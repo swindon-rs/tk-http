@@ -1,0 +1,46 @@
+commands:
+
+  cargo: !Command
+    description: Run any cargo command
+    link-as: cargo
+    work-dir: /work
+    linked-path-translation: true
+    container: ubuntu
+    run: [cargo]
+
+  make: !Command
+    description: Build the library
+    container: ubuntu
+    run: [cargo, build]
+
+  test: !Command
+    description: Run unit tests
+    container: ubuntu
+    environ:
+      RUST_BACKTRACE: 1
+    run: [cargo, test]
+
+containers:
+
+  ubuntu:
+    setup:
+    - !Ubuntu xenial
+    - !Repo xenial/universe
+    - !Install
+      - ca-certificates
+    - !Repo xenial/universe-updates
+    - !Install
+      - ca-certificates
+      - build-essential
+      - zlib1g-dev
+      - libssl-dev
+      - libcurl4-openssl-dev
+
+    - !TarInstall
+      url: "https://static.rust-lang.org/dist/rust-1.15.1-x86_64-unknown-linux-gnu.tar.gz"
+      script: "./install.sh --prefix=/usr \
+               --components=rustc,rust-std-x86_64-unknown-linux-gnu,cargo"
+
+    environ:
+      HOME: /work/target
+      USER: pc
