@@ -20,7 +20,7 @@ categories = [
     ]
 homepage = "https://github.com/swindon-rs/tk-http/"
 repository = "https://github.com/swindon-rs/tk-http/"
-documentation = "http://docs.rs/tk-http"
+documentation = "https://swindon-rs.github.io/tk-http"
 
 [dependencies]
 
