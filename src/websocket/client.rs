@@ -111,7 +111,7 @@ impl<S: Io> Authorizer<S> for SimpleAuthorizer {
         e.format_header("Origin",
             format_args!("http://{}{}", self.host, self.path))
             .unwrap();
-        e.add_header("User-Agent", concat!("minihttp/",
+        e.add_header("User-Agent", concat!("tk-http/",
             env!("CARGO_PKG_VERSION"))).unwrap();
         e.done()
     }

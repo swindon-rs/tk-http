@@ -3,7 +3,7 @@ extern crate tokio_core;
 extern crate futures;
 extern crate tk_bufstream;
 extern crate netbuf;
-extern crate minihttp;
+extern crate tk_http;
 #[macro_use] extern crate log;
 extern crate env_logger;
 
@@ -15,9 +15,9 @@ use tokio_core::io::Io;
 use futures::{Stream, Future};
 use futures::future::{FutureResult, ok};
 
-use minihttp::{Status};
-use minihttp::server::buffered::{Request, BufferedDispatcher};
-use minihttp::server::{Encoder, EncoderDone, Config, Proto, Error};
+use tk_http::{Status};
+use tk_http::server::buffered::{Request, BufferedDispatcher};
+use tk_http::server::{Encoder, EncoderDone, Config, Proto, Error};
 
 
 const BODY: &'static str = "Hello World!";
@@ -29,7 +29,7 @@ fn service<S:Io>(_: Request, mut e: Encoder<S>)
     e.add_length(BODY.as_bytes().len() as u64).unwrap();
     e.format_header("Date", time::now_utc().rfc822()).unwrap();
     e.add_header("Server",
-        concat!("minihttp/", env!("CARGO_PKG_VERSION"))
+        concat!("tk_http/", env!("CARGO_PKG_VERSION"))
     ).unwrap();
     if e.done_headers().unwrap() {
         e.write_body(BODY.as_bytes());

@@ -1,5 +1,5 @@
 extern crate futures;
-extern crate minihttp;
+extern crate tk_http;
 extern crate argparse;
 extern crate env_logger;
 extern crate tokio_core;
@@ -14,9 +14,9 @@ use futures::future::{FutureResult, ok};
 use futures::sync::mpsc::unbounded;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::{Timeout};
-use minihttp::websocket::{Loop, Frame, Error, Dispatcher, Config};
-use minihttp::websocket::client::{HandshakeProto, SimpleAuthorizer};
-use minihttp::websocket::Packet::{Text};
+use tk_http::websocket::{Loop, Frame, Error, Dispatcher, Config};
+use tk_http::websocket::client::{HandshakeProto, SimpleAuthorizer};
+use tk_http::websocket::Packet::{Text};
 
 struct Echo;
 

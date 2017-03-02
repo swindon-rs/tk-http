@@ -1,9 +1,21 @@
 [package]
-name = "minihttp"
+name = "tk-http"
 version = "0.1.0"
 authors = [
     "Alexey Popravka <alexey.popravka@horsedevel.com>",
     "Paul Colomiets <paul@colomiets.name>"]
+license = "MIT/Apache-2.0"
+readme = "README.rst"
+keywords = ["http", "websockets", "tokio"]
+categories = [
+    "asynchronous",
+    "network-programming",
+    "web-programming::http-client",
+    "web-programming::http-server",
+    "web-programming::websocket",
+    ]
+homepage = "http://github.com/tailhook/tk-http"
+documentation = "http://docs.rs/tk-http"
 
 [dependencies]
 

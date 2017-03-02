@@ -3,7 +3,7 @@ extern crate futures;
 extern crate futures_cpupool;
 extern crate netbuf;
 extern crate argparse;
-extern crate minihttp;
+extern crate tk_http;
 extern crate tk_sendfile;
 extern crate tk_bufstream;
 #[macro_use] extern crate log;
@@ -21,9 +21,9 @@ use futures_cpupool::CpuPool;
 use tk_sendfile::DiskPool;
 use futures::future::{ok};
 
-use minihttp::Status;
-use minihttp::server::buffered::{BufferedDispatcher};
-use minihttp::server::{Encoder, Config, Proto, Error};
+use tk_http::Status;
+use tk_http::server::buffered::{BufferedDispatcher};
+use tk_http::server::{Encoder, Config, Proto, Error};
 
 fn main() {
     let mut filename = PathBuf::from("examples/sendfile.rs");

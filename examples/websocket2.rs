@@ -3,7 +3,7 @@ extern crate tokio_core;
 extern crate futures;
 extern crate tk_bufstream;
 extern crate netbuf;
-extern crate minihttp;
+extern crate tk_http;
 #[macro_use] extern crate log;
 extern crate env_logger;
 
@@ -17,12 +17,12 @@ use futures::{Stream, Future, Sink};
 use futures::future::{FutureResult, ok};
 use futures::sync::mpsc::{unbounded, UnboundedSender};
 
-use minihttp::{Status};
-use minihttp::server::buffered::{Request, BufferedDispatcher};
-use minihttp::server::{Encoder, EncoderDone, Config, Proto, Error};
-use minihttp::websocket::{Loop, Config as WebsockConfig, Dispatcher, Frame};
-use minihttp::websocket::{Error as WsErr};
-use minihttp::websocket::Packet::{self, Text};
+use tk_http::{Status};
+use tk_http::server::buffered::{Request, BufferedDispatcher};
+use tk_http::server::{Encoder, EncoderDone, Config, Proto, Error};
+use tk_http::websocket::{Loop, Config as WebsockConfig, Dispatcher, Frame};
+use tk_http::websocket::{Error as WsErr};
+use tk_http::websocket::Packet::{self, Text};
 
 
 const INDEX: &'static str = include_str!("ws.html");
@@ -35,7 +35,7 @@ fn service<S:Io>(req: Request, mut e: Encoder<S>)
         e.status(Status::SwitchingProtocol);
         e.format_header("Date", time::now_utc().rfc822()).unwrap();
         e.add_header("Server",
-            concat!("minihttp/", env!("CARGO_PKG_VERSION"))
+            concat!("tk_http/", env!("CARGO_PKG_VERSION"))
         ).unwrap();
         e.add_header("Connection", "upgrade").unwrap();
         e.add_header("Upgrade", "websocket").unwrap();
@@ -52,7 +52,7 @@ fn service<S:Io>(req: Request, mut e: Encoder<S>)
         e.format_header("Date", time::now_utc().rfc822()).unwrap();
         e.add_header("Content-Type", ctype).unwrap();
         e.add_header("Server",
-            concat!("minihttp/", env!("CARGO_PKG_VERSION"))
+            concat!("tk_http/", env!("CARGO_PKG_VERSION"))
         ).unwrap();
         if e.done_headers().unwrap() {
             e.write_body(data.as_bytes());

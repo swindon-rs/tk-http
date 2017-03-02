@@ -1,7 +1,7 @@
 extern crate argparse;
 extern crate env_logger;
 extern crate futures;
-extern crate minihttp;
+extern crate tk_http;
 extern crate tokio_core;
 extern crate url;
 extern crate rustls;
@@ -19,8 +19,8 @@ use futures::{Future, Sink};
 use rustls::ClientConfig;
 use tokio_core::net::TcpStream;
 use tokio_rustls::ClientConfigExt;
-use minihttp::client::buffered::{Buffered};
-use minihttp::client::{Proto, Config, Error};
+use tk_http::client::buffered::{Buffered};
+use tk_http::client::{Proto, Config, Error};
 
 
 pub fn main() {

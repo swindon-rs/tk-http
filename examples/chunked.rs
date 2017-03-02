@@ -2,7 +2,7 @@ extern crate tokio_core;
 extern crate futures;
 extern crate tk_bufstream;
 extern crate netbuf;
-extern crate minihttp;
+extern crate tk_http;
 #[macro_use] extern crate log;
 extern crate env_logger;
 
@@ -14,9 +14,9 @@ use tokio_core::io::Io;
 use futures::{Stream, Future};
 use futures::future::{FutureResult, ok};
 
-use minihttp::Status;
-use minihttp::server::buffered::{Request, BufferedDispatcher};
-use minihttp::server::{Encoder, EncoderDone, Config, Proto, Error};
+use tk_http::Status;
+use tk_http::server::buffered::{Request, BufferedDispatcher};
+use tk_http::server::{Encoder, EncoderDone, Config, Proto, Error};
 
 
 fn service<S:Io>(req: Request, mut e: Encoder<S>)
