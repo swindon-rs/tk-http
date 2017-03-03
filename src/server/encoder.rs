@@ -319,7 +319,7 @@ impl<S: Io> Future for FutureRawBody<S> {
     }
 }
 
-#[cfg(feature="sendfile")]
+#[cfg(unix)]
 mod sendfile {
     use std::os::unix::io::{AsRawFd, RawFd};
     use tokio_core::io::Io;

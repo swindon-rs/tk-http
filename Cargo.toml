@@ -37,10 +37,6 @@ sha1 = "0.2.0"
 byteorder = "0.5.3"
 rand = "0.3.15"
 
-[features]
-default = ["sendfile"]
-sendfile = []
-
 [dev-dependencies]
 env_logger = "0.3.5"
 argparse = "0.2.1"
