@@ -348,12 +348,12 @@ impl<S: Io, D: Dispatcher<S>> Future for Proto<S, D> {
             Ok(true) => {
                 // TODO(tailhook) schedule notification with timeout
                 match self.proto.timeout() {
-                    Some(val) => {
+                    Some(new_timeout) => {
                         let now = Instant::now();
-                        if now > val {
+                        if now > new_timeout {
                             Err(ErrorEnum::Timeout.into())
                         } else {
-                            self.timeout = Timeout::new(val - Instant::now(),
+                            self.timeout = Timeout::new(new_timeout - now,
                                 &self.handle)
                                 .expect("can always add a timeout");
                             let timeo = self.timeout.poll()

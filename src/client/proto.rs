@@ -101,8 +101,11 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
         let res = self.proto.start_send(item)?;
         let new_timeout = self.proto.get_timeout();
         if old_timeout != new_timeout {
-            self.timeout = Timeout::new(new_timeout - Instant::now(),
-                                        &self.handle)
+            let now = Instant::now();
+            if new_timeout < now {
+                return Err(ErrorEnum::RequestTimeout.into());
+            }
+            self.timeout = Timeout::new(new_timeout - now, &self.handle)
                 .expect("can always add a timeout");
             let timeo = self.timeout.poll()
                 .expect("timeout can't fail on poll");
@@ -129,8 +132,11 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
         let res = self.proto.poll_complete()?;
         let new_timeout = self.proto.get_timeout();
         if old_timeout != new_timeout {
-            self.timeout = Timeout::new(new_timeout - Instant::now(),
-                                        &self.handle)
+            let now = Instant::now();
+            if new_timeout < now {
+                return Err(ErrorEnum::RequestTimeout.into());
+            }
+            self.timeout = Timeout::new(new_timeout - now, &self.handle)
                 .expect("can always add a timeout");
             let timeo = self.timeout.poll()
                 .expect("timeout can't fail on poll");
