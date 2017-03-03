@@ -56,7 +56,7 @@ pub fn main() {
             let (tx, rx) = unbounded();
 
             println!("Preparing to send packet in 5 seconds");
-            let tx2 = tx.clone();
+            let mut tx2 = tx.clone();
             h2.spawn(
                 Timeout::new(Duration::new(5, 0), &h2).unwrap()
                 .map_err(|_| unreachable!())
