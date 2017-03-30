@@ -28,7 +28,7 @@ futures = "0.1.7"
 httparse = "1.1.2"
 tokio-core = "0.1.6"
 tokio-io = "0.1.0"
-tk-bufstream = { git="https://github.com/tailhook/tk-bufstream", rev="4186137"}
+tk-bufstream = "0.3.0"
 netbuf = "0.4.0"
 quick-error = "1.1.0"
 matches = "0.1.4"
