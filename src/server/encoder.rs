@@ -337,11 +337,10 @@ mod sendfile {
 
     use std::io;
     use futures::{Async};
-    use tokio_core::net::TcpStream;
     use self::tk_sendfile::{Destination, FileOpener, Sendfile};
     use super::RawBody;
 
-    impl Destination for RawBody<TcpStream> {
+    impl<T: Destination> Destination for RawBody<T> {
         fn write_file<O: FileOpener>(&mut self, file: &mut Sendfile<O>)
             -> Result<usize, io::Error>
         {
