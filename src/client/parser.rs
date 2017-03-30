@@ -5,9 +5,9 @@ use std::str::from_utf8;
 use std::ascii::AsciiExt;
 
 use futures::{Future, Async, Poll};
-use tokio_core::io::Io;
 use httparse;
 use tk_bufstream::{ReadBuf, Buf};
+use tokio_io::AsyncRead;
 
 use enums::Version;
 use client::client::{BodyKind};
@@ -38,7 +38,7 @@ enum State {
     },
 }
 
-pub struct Parser<S: Io, C: Codec<S>> {
+pub struct Parser<S, C: Codec<S>> {
     io: Option<ReadBuf<S>>,
     codec: C,
     close: bool,
@@ -141,7 +141,7 @@ fn new_body(mode: BodyKind, recv_mode: Mode)
     }
 }
 
-fn parse_headers<S: Io, C: Codec<S>>(
+fn parse_headers<S, C: Codec<S>>(
     buffer: &mut Buf, codec: &mut C, is_head: bool)
     -> Result<Option<(State, bool)>, Error>
 {
@@ -191,7 +191,7 @@ fn parse_headers<S: Io, C: Codec<S>>(
     )))
 }
 
-impl<S: Io, C: Codec<S>> Parser<S, C> {
+impl<S, C: Codec<S>> Parser<S, C> {
     pub fn new(io: ReadBuf<S>, codec: C,
         request_state: Arc<AtomicUsize>, close_signal: Arc<AtomicBool>)
         -> Parser<S, C>
@@ -206,7 +206,9 @@ impl<S: Io, C: Codec<S>> Parser<S, C> {
             },
         }
     }
-    fn read_and_parse(&mut self) -> Poll<(), Error> {
+    fn read_and_parse(&mut self) -> Poll<(), Error>
+        where S: AsyncRead
+    {
         use self::State::*;
         use client::recv_mode::Mode::*;
         let mut io = self.io.as_mut().expect("buffer is still here");
@@ -289,7 +291,7 @@ impl<S: Io, C: Codec<S>> Parser<S, C> {
     }
 }
 
-impl<S: Io, C: Codec<S>> Future for Parser<S, C> {
+impl<S: AsyncRead, C: Codec<S>> Future for Parser<S, C> {
     type Item = Option<ReadBuf<S>>;
     type Error = Error;
     /// Returns None if response contains `Connection: close`

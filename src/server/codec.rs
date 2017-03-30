@@ -1,5 +1,4 @@
 use futures::{Async, Future};
-use tokio_core::io::Io;
 use tk_bufstream::{ReadBuf, WriteBuf};
 
 use super::{Error, Encoder, EncoderDone, Head};
@@ -14,7 +13,7 @@ pub enum BodyKind {
 }
 
 /// This is a low-level interface to the http server
-pub trait Dispatcher<S: Io> {
+pub trait Dispatcher<S> {
     /// The codec type  for this dispatcher
     ///
     /// In many cases the type is just `Box<Codec<S>>`, but it left as
@@ -33,7 +32,7 @@ pub trait Dispatcher<S: Io> {
 
 /// The type represents a consumer of a single request and yields a writer of
 /// a response (the latter is a ``ResponseFuture``
-pub trait Codec<S: Io> {
+pub trait Codec<S> {
     /// This is a future returned by `start_response`
     ///
     /// It's fine if it's just `Box<Future<Item=EncoderDone<S>, Error>>` in
@@ -92,7 +91,7 @@ pub trait Codec<S: Io> {
     }
 }
 
-impl<S: Io, F> Codec<S> for Box<Codec<S, ResponseFuture=F>>
+impl<S, F> Codec<S> for Box<Codec<S, ResponseFuture=F>>
     where F: Future<Item=EncoderDone<S>, Error=Error>,
 {
     type ResponseFuture = F;

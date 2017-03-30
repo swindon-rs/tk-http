@@ -2,8 +2,8 @@ use std::io;
 use std::fmt::Display;
 
 use futures::{Future, Poll};
-use tokio_core::io::Io;
 use tk_bufstream::{WriteBuf, WriteRaw, FutureWriteRaw};
+use tokio_io::AsyncWrite;
 
 use base_serializer::{MessageState, HeaderError};
 use enums::{Version, Status};
@@ -14,14 +14,14 @@ use super::headers::Head;
 ///
 /// Methods of this structure ensure that everything you write into a buffer
 /// is consistent and valid protocol
-pub struct Encoder<S: Io> {
+pub struct Encoder<S> {
     state: MessageState,
     io: WriteBuf<S>,
 }
 
 /// This structure returned from `Encoder::done` and works as a continuation
 /// that should be returned from the future that writes request.
-pub struct EncoderDone<S: Io> {
+pub struct EncoderDone<S> {
     buf: WriteBuf<S>,
 }
 
@@ -59,7 +59,7 @@ pub struct RawBody<S> {
 
 
 // TODO: Support responses to CONNECT and `Upgrade: websocket` requests.
-impl<S: Io> Encoder<S> {
+impl<S> Encoder<S> {
     /// Write a 100 (Continue) response.
     ///
     /// A server should respond with the 100 status code if it receives a
@@ -253,7 +253,7 @@ impl<S: Io> Encoder<S> {
     }
 }
 
-impl<S: Io> RawBody<S> {
+impl<S> RawBody<S> {
     /// Returns `EncoderDone` object that might be passed back to the HTTP
     /// protocol
     pub fn done(self) -> EncoderDone<S> {
@@ -261,7 +261,7 @@ impl<S: Io> RawBody<S> {
     }
 }
 
-impl<S: Io> io::Write for Encoder<S> {
+impl<S> io::Write for Encoder<S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         // TODO(tailhook) we might want to propatage error correctly
         // rather than panic
@@ -273,20 +273,32 @@ impl<S: Io> io::Write for Encoder<S> {
     }
 }
 
-impl<S: Io> io::Write for RawBody<S> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.io.write(buf)
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        self.io.flush()
+impl<S: AsyncWrite> AsyncWrite for Encoder<S> {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        panic!("Can't shutdown request encoder");
     }
 }
 
-pub fn get_inner<S: Io>(e: EncoderDone<S>) -> WriteBuf<S> {
+impl<S: AsyncWrite> io::Write for RawBody<S> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.io.get_mut().write(buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.io.get_mut().flush()
+    }
+}
+
+impl<S: AsyncWrite> AsyncWrite for RawBody<S> {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        panic!("Can't shutdown request body");
+    }
+}
+
+pub fn get_inner<S>(e: EncoderDone<S>) -> WriteBuf<S> {
     e.buf
 }
 
-pub fn new<S: Io>(io: WriteBuf<S>, cfg: ResponseConfig) -> Encoder<S> {
+pub fn new<S>(io: WriteBuf<S>, cfg: ResponseConfig) -> Encoder<S> {
     use base_serializer::Body::*;
 
     // TODO(tailhook) implement Connection: Close,
@@ -311,7 +323,7 @@ impl ResponseConfig {
     }
 }
 
-impl<S: Io> Future for FutureRawBody<S> {
+impl<S: AsyncWrite> Future for FutureRawBody<S> {
     type Item = RawBody<S>;
     type Error = io::Error;
     fn poll(&mut self) -> Poll<RawBody<S>, io::Error> {
@@ -319,16 +331,25 @@ impl<S: Io> Future for FutureRawBody<S> {
     }
 }
 
-#[cfg(unix)]
+#[cfg(feature="sendfile")]
 mod sendfile {
-    use std::os::unix::io::{AsRawFd, RawFd};
-    use tokio_core::io::Io;
+    extern crate tk_sendfile;
+
+    use std::io;
+    use futures::{Async};
+    use tokio_core::net::TcpStream;
+    use self::tk_sendfile::{Destination, FileOpener, Sendfile};
     use super::RawBody;
 
-    impl<T: Io + AsRawFd> AsRawFd for RawBody<T> {
-        fn as_raw_fd(&self) -> RawFd {
-            self.io.as_raw_fd()
+    impl Destination for RawBody<TcpStream> {
+        fn write_file<O: FileOpener>(&mut self, file: &mut Sendfile<O>)
+            -> Result<usize, io::Error>
+        {
+            // TODO(tailhook) check the data written
+            self.io.get_mut().write_file(file)
+        }
+        fn poll_write(&self) -> Async<()> {
+            self.io.get_ref().poll_write()
         }
     }
-
 }

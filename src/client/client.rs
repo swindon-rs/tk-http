@@ -1,7 +1,6 @@
 use futures::sink::Sink;
 use futures::future::FutureResult;
 use futures::{Async, AsyncSink, Future, IntoFuture};
-use tokio_core::io::Io;
 
 use client::{Error, Encoder, EncoderDone, Head, RecvMode};
 use client::errors::ErrorEnum;
@@ -24,7 +23,7 @@ pub enum BodyKind {
 /// If you don't have any special needs you might want to use
 /// `client::buffered::Buffered` codec implementation instead of implemeting
 /// this trait manually.
-pub trait Codec<S: Io> {
+pub trait Codec<S> {
     /// Future that `start_write()` returns
     type Future: Future<Item=EncoderDone<S>, Error=Error>;
 
@@ -73,7 +72,7 @@ pub trait Codec<S: Io> {
         -> Result<Async<usize>, Error>;
 }
 
-impl<S: Io, F> Codec<S> for Box<Codec<S, Future=F>>
+impl<S, F> Codec<S> for Box<Codec<S, Future=F>>
     where F: Future<Item=EncoderDone<S>, Error=Error>
 {
     type Future = F;
@@ -90,7 +89,7 @@ impl<S: Io, F> Codec<S> for Box<Codec<S, Future=F>>
     }
 }
 
-impl<S: Io, F> Codec<S> for Box<Codec<S, Future=F>+Send>
+impl<S, F> Codec<S> for Box<Codec<S, Future=F>+Send>
     where F: Future<Item=EncoderDone<S>, Error=Error>
 {
     type Future = F;
@@ -117,7 +116,7 @@ impl<S: Io, F> Codec<S> for Box<Codec<S, Future=F>+Send>
 /// boxing or have fine grained control, use `Proto` (which is a `Sink`)
 /// directly.
 ///
-pub trait Client<S: Io, F>: Sink<SinkItem=Box<Codec<S, Future=F>>>
+pub trait Client<S, F>: Sink<SinkItem=Box<Codec<S, Future=F>>>
     where F: Future<Item=EncoderDone<S>, Error=Error>,
 {
     /// Simple fetch helper
@@ -126,7 +125,7 @@ pub trait Client<S: Io, F>: Sink<SinkItem=Box<Codec<S, Future=F>>>
         where <Self as Sink>::SinkError: Into<Error>;
 }
 
-impl<T, S: Io> Client<S, FutureResult<EncoderDone<S>, Error>> for T
+impl<T, S> Client<S, FutureResult<EncoderDone<S>, Error>> for T
     where T: Sink<SinkItem=Box<
             Codec<S, Future=FutureResult<EncoderDone<S>, Error>>
         >>,

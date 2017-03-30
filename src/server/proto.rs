@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use futures::{Future, Poll, Async};
 use tk_bufstream::{IoBuf, WriteBuf, ReadBuf};
-use tokio_core::io::Io;
+use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_core::reactor::{Handle, Timeout};
 
 use super::encoder::{self, get_inner, ResponseConfig};
@@ -18,7 +18,7 @@ use chunked;
 use body_parser::BodyProgress;
 
 
-enum OutState<S: Io, F, C> {
+enum OutState<S, F, C> {
     Idle(WriteBuf<S>),
     Write(F),
     Switch(F, C),
@@ -41,7 +41,7 @@ enum InState<C> {
     Closed,
 }
 
-pub struct PureProto<S: Io, D: Dispatcher<S>> {
+pub struct PureProto<S, D: Dispatcher<S>> {
     dispatcher: D,
     inbuf: Option<ReadBuf<S>>, // it's optional only for hijacking
     reading: InState<D::Codec>,
@@ -57,7 +57,7 @@ pub struct PureProto<S: Io, D: Dispatcher<S>> {
 }
 
 /// A low-level HTTP/1.x server protocol handler
-pub struct Proto<S: Io, D: Dispatcher<S>> {
+pub struct Proto<S, D: Dispatcher<S>> {
     proto: PureProto<S, D>,
     handle: Handle,
     timeout: Timeout,
@@ -80,7 +80,7 @@ fn new_body(mode: BodyKind, recv_mode: Mode)
     }
 }
 
-impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
+impl<S: AsyncRead+AsyncWrite, D: Dispatcher<S>> Proto<S, D> {
     /// Create a new protocol implementation from a TCP connection and a config
     ///
     /// You should use this protocol as a `Sink`
@@ -97,9 +97,10 @@ impl<S: Io, D: Dispatcher<S>> Proto<S, D> {
     }
 }
 
-impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
+impl<S, D: Dispatcher<S>> PureProto<S, D> {
     pub fn new(conn: S, cfg: &Arc<Config>, dispatcher: D)
         -> PureProto<S, D>
+        where S: AsyncRead + AsyncWrite
     {
         let (cout, cin) = IoBuf::new(conn).split();
         PureProto {
@@ -118,7 +119,9 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
         }
     }
     /// Resturns Ok(true) if new data has been read
-    fn do_reads(&mut self) -> Result<bool, Error> {
+    fn do_reads(&mut self) -> Result<bool, Error>
+        where S: AsyncRead
+    {
         use self::InState::*;
         let mut changed = false;
         let mut inbuf = self.inbuf.as_mut();
@@ -224,7 +227,9 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
         }
         Ok(changed)
     }
-    fn do_writes(&mut self) -> Result<(), Error> {
+    fn do_writes(&mut self) -> Result<(), Error>
+        where S: AsyncWrite
+    {
         use self::OutState::*;
         use self::InState::*;
         use server::recv_mode::Mode::{BufferedUpfront, Progressive};
@@ -307,7 +312,7 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
     }
 }
 
-impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
+impl<S: AsyncRead+AsyncWrite, D: Dispatcher<S>> PureProto<S, D> {
     /// Does all needed processing and returns Ok(true) if connection is fine
     /// and Ok(false) if it needs to be closed
     fn process(&mut self) -> Result<bool, Error> {
@@ -338,7 +343,7 @@ impl<S: Io, D: Dispatcher<S>> PureProto<S, D> {
     }
 }
 
-impl<S: Io, D: Dispatcher<S>> Future for Proto<S, D> {
+impl<S: AsyncRead+AsyncWrite, D: Dispatcher<S>> Future for Proto<S, D> {
     type Item = ();
     type Error = Error;
 

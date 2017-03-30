@@ -4,9 +4,9 @@ use std::sync::Arc;
 use futures::{Future, Async, Stream};
 use futures::future::{FutureResult, ok};
 use futures::stream;
-use tokio_core::io::Io;
 use tk_bufstream::{ReadFramed, WriteFramed, ReadBuf, WriteBuf};
 use tk_bufstream::{Encode};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 use websocket::{Frame, Config, Packet, Error, ServerCodec, ClientCodec};
 use websocket::error::ErrorEnum;
@@ -32,7 +32,7 @@ pub trait Dispatcher {
 /// output messages to from external futures.
 ///
 /// Also Loop object answers pings by itself and pings idle connections.
-pub struct Loop<S: Io, T, D: Dispatcher> {
+pub struct Loop<S, T, D: Dispatcher> {
     config: Arc<Config>,
     input: ReadBuf<S>,
     output: WriteBuf<S>,
@@ -63,7 +63,7 @@ enum LoopState {
 }
 
 // TODO(tailhook) Stream::Error should be Void here
-impl<S: Io, T, D, E> Loop<S, T, D>
+impl<S, T, D, E> Loop<S, T, D>
     where T: Stream<Item=Packet, Error=E>,
           D: Dispatcher,
 {
@@ -109,7 +109,7 @@ impl<S: Io, T, D, E> Loop<S, T, D>
     }
 }
 
-impl<S: Io> Loop<S, stream::Empty<Packet, VoidError>, BlackHole>
+impl<S> Loop<S, stream::Empty<Packet, VoidError>, BlackHole>
 {
     /// A websocket loop that sends failure and waits for closing handshake
     ///
@@ -148,7 +148,7 @@ impl<S: Io> Loop<S, stream::Empty<Packet, VoidError>, BlackHole>
     }
 }
 
-impl<S: Io, T, D, E> Loop<S, T, D>
+impl<S, T, D, E> Loop<S, T, D>
     where T: Stream<Item=Packet, Error=E>,
           D: Dispatcher,
 {
@@ -199,10 +199,11 @@ impl<S: Io, T, D, E> Loop<S, T, D>
     }
 }
 
-impl<S: Io, T, D, E> Future for Loop<S, T, D>
+impl<S, T, D, E> Future for Loop<S, T, D>
     where T: Stream<Item=Packet, Error=E>,
           D: Dispatcher,
           E: fmt::Display,
+          S: AsyncRead + AsyncWrite,
 {
     type Item = ();  // TODO(tailhook) void?
     type Error = Error;

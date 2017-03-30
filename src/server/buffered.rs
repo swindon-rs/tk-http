@@ -6,7 +6,6 @@ use std::marker::PhantomData;
 
 use futures::{Async, Future, IntoFuture};
 use futures::future::FutureResult;
-use tokio_core::io::Io;
 use tokio_core::reactor::Handle;
 use tk_bufstream::{ReadBuf, WriteBuf, ReadFramed, WriteFramed};
 
@@ -33,7 +32,7 @@ pub struct Request {
 
 /// A dispatcher that allows to process request and return response using
 /// a one single function
-pub struct BufferedDispatcher<S: Io, N: NewService<S>> {
+pub struct BufferedDispatcher<S, N: NewService<S>> {
     addr: SocketAddr,
     max_request_length: usize,
     service: N,
@@ -66,7 +65,7 @@ pub struct WebsocketService<H, I, T, U> {
 }
 
 /// A trait that you must implement to reply on requests, usually a function
-pub trait NewService<S: Io> {
+pub trait NewService<S> {
     /// Future returned by the service (an actual function serving request)
     type Future: Future<Item=EncoderDone<S>, Error=Error>;
     /// Instance of the service, created for each request
@@ -76,7 +75,7 @@ pub trait NewService<S: Io> {
 }
 
 /// An instance of a NewService for a single request, usually just a function
-pub trait Service<S: Io> {
+pub trait Service<S> {
     /// A future returned by `call()`
     type Future: Future<Item=EncoderDone<S>, Error=Error>;
 
@@ -96,7 +95,7 @@ pub trait Service<S: Io> {
         -> Self::WebsocketFuture;
 }
 
-impl<H, I, T, U, S: Io> NewService<S> for WebsocketFactory<H, I>
+impl<H, I, T, U, S> NewService<S> for WebsocketFactory<H, I>
     where H: Fn(Request, Encoder<S>) -> T,
           I: Fn(WriteFramed<S, WebsocketCodec>,
                 ReadFramed<S, WebsocketCodec>) -> U,
@@ -114,7 +113,7 @@ impl<H, I, T, U, S: Io> NewService<S> for WebsocketFactory<H, I>
     }
 }
 
-impl<S: Io, H, I, T, U> Service<S> for WebsocketService<H, I, T, U>
+impl<S, H, I, T, U> Service<S> for WebsocketService<H, I, T, U>
     where H: Fn(Request, Encoder<S>) -> T,
           I: Fn(WriteFramed<S, WebsocketCodec>,
                 ReadFramed<S, WebsocketCodec>) -> U,
@@ -165,7 +164,7 @@ impl Request {
     }
 }
 
-impl<S: Io, T, R> NewService<S> for T
+impl<S, T, R> NewService<S> for T
     where T: Fn() -> R,
           R: Service<S>,
 {
@@ -176,7 +175,7 @@ impl<S: Io, T, R> NewService<S> for T
     }
 }
 
-impl<S: Io, T, F> Service<S> for T
+impl<S, T, F> Service<S> for T
     where T: Fn(Request, Encoder<S>) -> F,
         F: Future<Item=EncoderDone<S>, Error=Error>,
 {
@@ -196,7 +195,7 @@ impl<S: Io, T, F> Service<S> for T
 }
 
 
-impl<S: Io, N: NewService<S>> BufferedDispatcher<S, N> {
+impl<S, N: NewService<S>> BufferedDispatcher<S, N> {
     /// Create an instance of bufferd dispatcher
     pub fn new(addr: SocketAddr, handle: &Handle, service: N)
         -> BufferedDispatcher<S, N>
@@ -215,7 +214,7 @@ impl<S: Io, N: NewService<S>> BufferedDispatcher<S, N> {
     }
 }
 
-impl<S: Io, H, I, T, U> BufferedDispatcher<S, WebsocketFactory<H, I>>
+impl<S, H, I, T, U> BufferedDispatcher<S, WebsocketFactory<H, I>>
     where H: Fn(Request, Encoder<S>) -> T,
           I: Fn(WriteFramed<S, WebsocketCodec>,
                 ReadFramed<S, WebsocketCodec>) -> U,
@@ -241,7 +240,7 @@ impl<S: Io, H, I, T, U> BufferedDispatcher<S, WebsocketFactory<H, I>>
     }
 }
 
-impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N> {
+impl<S, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N> {
     type Codec = BufferedCodec<N::Instance>;
 
     fn headers_received(&mut self, headers: &Head)
@@ -270,7 +269,7 @@ impl<S: Io, N: NewService<S>> Dispatcher<S> for BufferedDispatcher<S, N> {
     }
 }
 
-impl<S: Io, R: Service<S>> Codec<S> for BufferedCodec<R> {
+impl<S, R: Service<S>> Codec<S> for BufferedCodec<R> {
     type ResponseFuture = R::Future;
     fn recv_mode(&mut self) -> RecvMode {
         if self.request.as_ref().unwrap().websocket_handshake.is_some() {

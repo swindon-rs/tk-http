@@ -1,5 +1,4 @@
 use httparse::InvalidChunkSize;
-use tokio_core::io::Io;
 use tk_bufstream::ReadBuf;
 
 
@@ -15,7 +14,7 @@ pub enum BodyProgress {
 
 impl BodyProgress {
     /// Returns useful number of bytes in buffer and "end" ("done") flag
-    pub fn check_buf<S: Io>(&self, io: &ReadBuf<S>) -> (usize, bool) {
+    pub fn check_buf<S>(&self, io: &ReadBuf<S>) -> (usize, bool) {
         use self::BodyProgress::*;
         match *self {
             Fixed(x) if x <= io.in_buf.len() => (x, true),
@@ -24,7 +23,7 @@ impl BodyProgress {
             Eof => (io.in_buf.len(), io.done()),
         }
     }
-    pub fn parse<S: Io>(&mut self, io: &mut ReadBuf<S>)
+    pub fn parse<S>(&mut self, io: &mut ReadBuf<S>)
         -> Result<(), InvalidChunkSize>
     {
         use self::BodyProgress::*;
@@ -35,7 +34,7 @@ impl BodyProgress {
         }
         Ok(())
     }
-    pub fn consume<S: Io>(&mut self, io: &mut ReadBuf<S>, n: usize) {
+    pub fn consume<S>(&mut self, io: &mut ReadBuf<S>, n: usize) {
         use self::BodyProgress::*;
         io.in_buf.consume(n);
         match *self {

@@ -4,7 +4,6 @@ use std::ascii::AsciiExt;
 use std::borrow::Cow;
 
 use httparse::{self, EMPTY_HEADER, Request, Header};
-use tokio_core::io::Io;
 use tk_bufstream::Buf;
 
 use server::error::{Error, ErrorEnum};
@@ -305,8 +304,7 @@ fn scan_headers<'x>(raw_request: &'x Request)
 
 pub fn parse_headers<S, D>(buffer: &mut Buf, disp: &mut D)
     -> Result<Option<(BodyKind, D::Codec, ResponseConfig)>, Error>
-    where S: Io,
-          D: Dispatcher<S>,
+    where D: Dispatcher<S>,
 {
     let (body_kind, codec, cfg, bytes) = {
         let mut vec;

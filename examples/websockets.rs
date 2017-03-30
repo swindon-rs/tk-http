@@ -11,7 +11,6 @@ use std::env;
 
 use tokio_core::reactor::Core;
 use tokio_core::net::{TcpListener};
-use tokio_core::io::Io;
 use futures::{Stream, Future};
 use futures::future::{FutureResult, ok};
 
@@ -23,7 +22,7 @@ use tk_http::server::{Encoder, EncoderDone, Config, Proto, Error};
 const INDEX: &'static str = include_str!("ws.html");
 const JS: &'static str = include_str!("ws.js");
 
-fn service<S:Io>(req: Request, mut e: Encoder<S>)
+fn service<S>(req: Request, mut e: Encoder<S>)
     -> FutureResult<EncoderDone<S>, Error>
 {
     if let Some(ws) = req.websocket_handshake() {

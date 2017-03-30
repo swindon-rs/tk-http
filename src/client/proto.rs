@@ -6,9 +6,9 @@ use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::time::Instant;
 
 use tk_bufstream::{IoBuf, WriteBuf, ReadBuf};
-use tokio_core::io::Io;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::{Handle, Timeout};
+use tokio_io::{AsyncRead, AsyncWrite};
 use futures::{Future, AsyncSink, Async, Sink, StartSend, Poll};
 
 use client::parser::Parser;
@@ -17,13 +17,13 @@ use client::errors::ErrorEnum;
 use client::{Codec, Error, Config};
 
 
-enum OutState<S: Io, F> {
+enum OutState<S, F> {
     Idle(WriteBuf<S>, Instant),
     Write(F, Instant),
     Void,
 }
 
-enum InState<S: Io, C: Codec<S>> {
+enum InState<S, C: Codec<S>> {
     Idle(ReadBuf<S>),
     Read(Parser<S, C>, Instant),
     Void,
@@ -35,7 +35,7 @@ struct Waiting<C> {
     queued_at: Instant,
 }
 
-pub struct PureProto<S: Io, C: Codec<S>> {
+pub struct PureProto<S, C: Codec<S>> {
     writing: OutState<S, C::Future>,
     waiting: VecDeque<Waiting<C>>,
     reading: InState<S, C>,
@@ -47,18 +47,20 @@ pub struct PureProto<S: Io, C: Codec<S>> {
 ///
 /// Note, most of the time you need some reconnection facility and/or
 /// connection pooling on top of this interface
-pub struct Proto<S: Io, C: Codec<S>> {
+pub struct Proto<S, C: Codec<S>> {
     proto: PureProto<S, C>,
     handle: Handle,
     timeout: Timeout,
 }
 
 
-impl<S: Io, C: Codec<S>> Proto<S, C> {
+impl<S, C: Codec<S>> Proto<S, C> {
     /// Create a new protocol implementation from a TCP connection and a config
     ///
     /// You should use this protocol as a `Sink`
-    pub fn new(conn: S, handle: &Handle, cfg: &Arc<Config>) -> Proto<S, C> {
+    pub fn new(conn: S, handle: &Handle, cfg: &Arc<Config>) -> Proto<S, C>
+        where S: AsyncRead + AsyncWrite
+    {
         let (cout, cin) = IoBuf::new(conn).split();
         Proto {
             proto: PureProto {
@@ -91,7 +93,7 @@ impl<C: Codec<TcpStream>> Proto<TcpStream, C> {
         as Box<Future<Item=_, Error=_>>
     }
 }
-impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
+impl<S: AsyncRead + AsyncWrite, C: Codec<S>> Sink for Proto<S, C> {
     type SinkItem = C;
     type SinkError = Error;
     fn start_send(&mut self, item: Self::SinkItem)
@@ -152,7 +154,7 @@ impl<S: Io, C: Codec<S>> Sink for Proto<S, C> {
     }
 }
 
-impl<S: Io, C: Codec<S>> PureProto<S, C> {
+impl<S, C: Codec<S>> PureProto<S, C> {
     fn get_timeout(&self) -> Instant {
         match self.writing {
             OutState::Idle(_, time) => {
@@ -179,7 +181,7 @@ impl<S: Io, C: Codec<S>> PureProto<S, C> {
     }
 }
 
-impl<S: Io, C: Codec<S>> Sink for PureProto<S, C> {
+impl<S: AsyncRead + AsyncWrite, C: Codec<S>> Sink for PureProto<S, C> {
     type SinkItem = C;
     type SinkError = Error;
     fn start_send(&mut self, mut item: Self::SinkItem)

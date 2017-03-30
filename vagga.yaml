@@ -2,9 +2,7 @@ commands:
 
   cargo: !Command
     description: Run any cargo command
-    link-as: cargo
     work-dir: /work
-    linked-path-translation: true
     container: ubuntu
     run: [cargo]
 

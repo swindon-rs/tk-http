@@ -6,7 +6,7 @@ use std::fmt::Display;
 use futures::{Future, Async};
 use httparse::{self, Header};
 use tk_bufstream::{IoBuf, ReadBuf, WriteBuf, WriteFramed, ReadFramed};
-use tokio_core::io::Io;
+use tokio_io::{AsyncRead, AsyncWrite};
 
 use base_serializer::{MessageState, HeaderError};
 // TODO(tailhook) change the error
@@ -26,14 +26,14 @@ const MAX_HEADERS: usize = 1024;
 ///
 /// Methods of this structure ensure that everything you write into a buffer
 /// is consistent and valid protocol
-pub struct Encoder<S: Io> {
+pub struct Encoder<S> {
     message: MessageState,
     buf: WriteBuf<S>,
 }
 
 /// This structure returned from `Encoder::done` and works as a continuation
 /// that should be returned from the future that writes request.
-pub struct EncoderDone<S: Io> {
+pub struct EncoderDone<S> {
     buf: WriteBuf<S>,
 }
 
@@ -42,7 +42,7 @@ pub struct EncoderDone<S: Io> {
 ///
 /// The `SimpleAuthorizer` implementation is good enough for most cases, but
 /// custom authorizer may be helpful for `Cookie` or `Authorization` header.
-pub trait Authorizer<S: Io> {
+pub trait Authorizer<S> {
     /// The type that may be returned from a `header_received`. It should
     /// encompass everything parsed from input headers.
     type Result: Sized;
@@ -103,7 +103,7 @@ impl SimpleAuthorizer {
     }
 }
 
-impl<S: Io> Authorizer<S> for SimpleAuthorizer {
+impl<S> Authorizer<S> for SimpleAuthorizer {
     type Result = ();
     fn write_headers(&mut self, mut e: Encoder<S>) -> EncoderDone<S> {
         e.request_line(&self.path);
@@ -131,7 +131,7 @@ fn check_header(name: &str) {
     }
 }
 
-impl<S: Io> Encoder<S> {
+impl<S> Encoder<S> {
     /// Write request line.
     ///
     /// This puts request line into a buffer immediately. If you don't
@@ -207,16 +207,18 @@ impl<S: Io> Encoder<S> {
     }
 }
 
-fn encoder<S: Io>(io: WriteBuf<S>) -> Encoder<S> {
+fn encoder<S>(io: WriteBuf<S>) -> Encoder<S> {
     Encoder {
         message: MessageState::RequestStart,
         buf: io,
     }
 }
 
-impl<S: Io, A: Authorizer<S>> HandshakeProto<S, A> {
+impl<S, A: Authorizer<S>> HandshakeProto<S, A> {
     /// Create an instance of future from already connected socket
-    pub fn new(transport: S, mut authorizer: A) -> HandshakeProto<S, A> {
+    pub fn new(transport: S, mut authorizer: A) -> HandshakeProto<S, A>
+        where S: AsyncRead + AsyncWrite
+    {
         let (tx, rx) = IoBuf::new(transport).split();
         let out = authorizer.write_headers(encoder(tx)).buf;
         HandshakeProto {
@@ -267,8 +269,9 @@ impl<S: Io, A: Authorizer<S>> HandshakeProto<S, A> {
     }
 }
 
-impl<S: Io, A> Future for HandshakeProto<S, A>
-    where A: Authorizer<S>
+impl<S, A> Future for HandshakeProto<S, A>
+    where A: Authorizer<S>,
+          S: AsyncRead + AsyncWrite
 {
     type Item = (WriteFramed<S, ClientCodec>, ReadFramed<S, ClientCodec>,
                  A::Result);

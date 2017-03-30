@@ -11,7 +11,6 @@ use std::env;
 
 use tokio_core::reactor::Core;
 use tokio_core::net::{TcpListener};
-use tokio_core::io::Io;
 use futures::{Stream, Future};
 use futures::future::{FutureResult, ok};
 
@@ -22,7 +21,7 @@ use tk_http::server::{Encoder, EncoderDone, Config, Proto, Error};
 
 const BODY: &'static str = "Hello World!";
 
-fn service<S:Io>(_: Request, mut e: Encoder<S>)
+fn service<S>(_: Request, mut e: Encoder<S>)
     -> FutureResult<EncoderDone<S>, Error>
 {
     e.status(Status::Ok);

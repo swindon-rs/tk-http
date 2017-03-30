@@ -13,7 +13,6 @@ use url::Url;
 use futures::Async;
 use futures::future::{FutureResult, ok};
 use futures::sync::oneshot::{channel, Sender, Receiver};
-use tokio_core::io::Io;
 
 use enums::Status;
 use enums::Version;
@@ -54,7 +53,7 @@ impl Response {
     }
 }
 
-impl<S: Io> Codec<S> for Buffered {
+impl<S> Codec<S> for Buffered {
     type Future = FutureResult<EncoderDone<S>, Error>;
     fn start_write(&mut self, mut e: Encoder<S>) -> Self::Future {
         e.request_line(self.method, self.url.path(), Version::Http11);
@@ -82,7 +81,8 @@ impl<S: Io> Codec<S> for Buffered {
         assert!(end);
         let mut response = self.response.take().unwrap();
         response.body = data.to_vec();
-        self.sender.take().unwrap().complete(Ok(response));
+        self.sender.take().unwrap().send(Ok(response))
+            .map_err(|_| debug!("Unused HTTP response")).ok();
         Ok(Async::Ready(data.len()))
     }
 }

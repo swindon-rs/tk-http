@@ -16,13 +16,13 @@ extern crate sha1;
 extern crate rand;
 extern crate httparse;
 extern crate tokio_core;
+extern crate tokio_io;
 extern crate netbuf;
 extern crate tk_bufstream;
 extern crate byteorder;
 #[macro_use(quick_error)] extern crate quick_error;
 #[macro_use] extern crate matches;
 #[macro_use] extern crate log;
-
 
 pub mod server;
 pub mod client;

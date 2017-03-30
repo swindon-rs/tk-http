@@ -3,7 +3,6 @@ use std::fmt::Display;
 use std::ascii::AsciiExt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
-use tokio_core::io::Io;
 use tk_bufstream::WriteBuf;
 
 use enums::Version;
@@ -20,7 +19,7 @@ pub enum RequestState {
 ///
 /// Methods of this structure ensure that everything you write into a buffer
 /// is consistent and valid protocol
-pub struct Encoder<S: Io> {
+pub struct Encoder<S> {
     message: MessageState,
     buf: WriteBuf<S>,
     // TODO(tailhook) we could use smaller atomic, but they are unstable
@@ -30,15 +29,15 @@ pub struct Encoder<S: Io> {
 
 /// This structure returned from `Encoder::done` and works as a continuation
 /// that should be returned from the future that writes request.
-pub struct EncoderDone<S: Io> {
+pub struct EncoderDone<S> {
     buf: WriteBuf<S>,
 }
 
-pub fn get_inner<S: Io>(e: EncoderDone<S>) -> WriteBuf<S> {
+pub fn get_inner<S>(e: EncoderDone<S>) -> WriteBuf<S> {
     e.buf
 }
 
-impl<S: Io> Encoder<S> {
+impl<S> Encoder<S> {
     /// Write request line.
     ///
     /// This puts request line into a buffer immediately. If you don't
@@ -171,7 +170,7 @@ impl<S: Io> Encoder<S> {
     }
 }
 
-pub fn new<S: Io>(io: WriteBuf<S>,
+pub fn new<S>(io: WriteBuf<S>,
     state: Arc<AtomicUsize>, close_signal: Arc<AtomicBool>)
     -> Encoder<S>
 {
@@ -183,7 +182,7 @@ pub fn new<S: Io>(io: WriteBuf<S>,
     }
 }
 
-impl<S: Io> io::Write for Encoder<S> {
+impl<S> io::Write for Encoder<S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         // TODO(tailhook) we might want to propatage error correctly
         // rather than panic

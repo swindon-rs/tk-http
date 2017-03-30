@@ -13,7 +13,6 @@ use std::sync::atomic::{Ordering, AtomicUsize};
 
 use tokio_core::reactor::Core;
 use tokio_core::net::{TcpListener};
-use tokio_core::io::Io;
 use futures::{Stream, Future};
 use futures::future::{FutureResult, ok};
 
@@ -22,7 +21,7 @@ use tk_http::server::buffered::{Request, BufferedDispatcher};
 use tk_http::server::{Encoder, EncoderDone, Config, Proto, Error};
 
 
-fn service<S:Io>(counter: usize, _: Request, mut e: Encoder<S>)
+fn service<S>(counter: usize, _: Request, mut e: Encoder<S>)
     -> FutureResult<EncoderDone<S>, Error>
 {
     let formatted = format!("Visit #{}", counter);

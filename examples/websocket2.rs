@@ -12,7 +12,6 @@ use std::time::Duration;
 
 use tokio_core::reactor::{Core, Timeout};
 use tokio_core::net::{TcpListener};
-use tokio_core::io::Io;
 use futures::{Stream, Future, Sink};
 use futures::future::{FutureResult, ok};
 use futures::sync::mpsc::{unbounded, UnboundedSender};
@@ -28,7 +27,7 @@ use tk_http::websocket::Packet::{self, Text};
 const INDEX: &'static str = include_str!("ws.html");
 const JS: &'static str = include_str!("ws.js");
 
-fn service<S:Io>(req: Request, mut e: Encoder<S>)
+fn service<S>(req: Request, mut e: Encoder<S>)
     -> FutureResult<EncoderDone<S>, Error>
 {
     if let Some(ws) = req.websocket_handshake() {
