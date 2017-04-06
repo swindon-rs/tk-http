@@ -6,12 +6,14 @@ extern crate argparse;
 extern crate tk_http;
 extern crate tk_sendfile;
 extern crate tk_bufstream;
-#[macro_use] extern crate log;
+extern crate tk_listen;
+extern crate log;
 extern crate env_logger;
 
 use std::env;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use argparse::{ArgumentParser, Parse};
 use tokio_core::reactor::Core;
@@ -24,6 +26,8 @@ use futures::future::{ok};
 use tk_http::Status;
 use tk_http::server::buffered::{BufferedDispatcher};
 use tk_http::server::{Encoder, Config, Proto, Error};
+use tk_listen::ListenExt;
+
 
 fn main() {
     let mut filename = PathBuf::from("examples/sendfile.rs");
@@ -52,7 +56,7 @@ fn main() {
     let h1 = lp.handle();
 
     let done = listener.incoming()
-        .map_err(|e| { println!("Accept error: {}", e); })
+        .sleep_on_error(Duration::from_millis(100), &lp.handle())
         .map(|(socket, addr)| {
             Proto::new(socket, &cfg,
                 BufferedDispatcher::new(addr, &h1, || |_, mut e: Encoder<_>| {
@@ -75,8 +79,7 @@ fn main() {
                 &h1)
             .map_err(|e| { println!("Connection error: {}", e); })
         })
-        .buffer_unordered(200000)
-          .for_each(|()| Ok(()));
+        .listen(1000);
 
     lp.run(done).unwrap();
 }

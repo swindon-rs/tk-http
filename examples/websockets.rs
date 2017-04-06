@@ -4,10 +4,12 @@ extern crate futures;
 extern crate tk_bufstream;
 extern crate netbuf;
 extern crate tk_http;
+extern crate tk_listen;
 #[macro_use] extern crate log;
 extern crate env_logger;
 
 use std::env;
+use std::time::Duration;
 
 use tokio_core::reactor::Core;
 use tokio_core::net::{TcpListener};
@@ -17,6 +19,7 @@ use futures::future::{FutureResult, ok};
 use tk_http::{Status};
 use tk_http::server::buffered::{Request, BufferedDispatcher};
 use tk_http::server::{Encoder, EncoderDone, Config, Proto, Error};
+use tk_listen::ListenExt;
 
 
 const INDEX: &'static str = include_str!("ws.html");
@@ -70,7 +73,7 @@ fn main() {
     let cfg = Config::new().done();
 
     let done = listener.incoming()
-        .map_err(|e| { println!("Accept error: {}", e); })
+        .sleep_on_error(Duration::from_millis(100), &lp.handle())
         .map(move |(socket, addr)| {
             Proto::new(socket, &cfg,
                 BufferedDispatcher::new_with_websockets(addr, &h1,
@@ -84,8 +87,7 @@ fn main() {
             .map_err(|e| { println!("Connection error: {}", e); })
             .then(|_| Ok(())) // don't fail, please
         })
-        .buffer_unordered(200000)
-          .for_each(|()| Ok(()));
+        .listen(1000);
 
     lp.run(done).unwrap();
 }

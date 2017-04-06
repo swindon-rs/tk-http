@@ -4,7 +4,7 @@ extern crate futures;
 extern crate tk_bufstream;
 extern crate netbuf;
 extern crate tk_http;
-#[macro_use] extern crate log;
+extern crate tk_listen;
 extern crate env_logger;
 
 use std::env;
@@ -22,6 +22,7 @@ use tk_http::server::{Encoder, EncoderDone, Config, Proto, Error};
 use tk_http::websocket::{Loop, Config as WebsockConfig, Dispatcher, Frame};
 use tk_http::websocket::{Error as WsErr};
 use tk_http::websocket::Packet::{self, Text};
+use tk_listen::ListenExt;
 
 
 const INDEX: &'static str = include_str!("ws.html");
@@ -87,7 +88,7 @@ fn main() {
     let wcfg = WebsockConfig::new().done();
 
     let done = listener.incoming()
-        .map_err(|e| { println!("Accept error: {}", e); })
+        .sleep_on_error(Duration::from_millis(100), &lp.handle())
         .map(move |(socket, addr)| {
             let wcfg = wcfg.clone();
             let h2 = h1.clone();
@@ -113,8 +114,7 @@ fn main() {
             .map_err(|e| { println!("Connection error: {}", e); })
             .then(|_| Ok(())) // don't fail, please
         })
-        .buffer_unordered(200000)
-          .for_each(|()| Ok(()));
+        .listen(1000);
 
     lp.run(done).unwrap();
 }

@@ -4,12 +4,13 @@ extern crate futures;
 extern crate tk_bufstream;
 extern crate netbuf;
 extern crate tk_http;
-#[macro_use] extern crate log;
+extern crate tk_listen;
 extern crate env_logger;
 
 use std::env;
 use std::sync::Arc;
 use std::sync::atomic::{Ordering, AtomicUsize};
+use std::time::Duration;
 
 use tokio_core::reactor::Core;
 use tokio_core::net::{TcpListener};
@@ -19,6 +20,7 @@ use futures::future::{FutureResult, ok};
 use tk_http::{Status};
 use tk_http::server::buffered::{Request, BufferedDispatcher};
 use tk_http::server::{Encoder, EncoderDone, Config, Proto, Error};
+use tk_listen::ListenExt;
 
 
 fn service<S>(counter: usize, _: Request, mut e: Encoder<S>)
@@ -53,7 +55,7 @@ fn main() {
     let counter = Arc::new(AtomicUsize::new(0));
 
     let done = listener.incoming()
-        .map_err(|e| { println!("Accept error: {}", e); })
+        .sleep_on_error(Duration::from_millis(100), &lp.handle())
         .map(move |(socket, addr)| {
             let counter = counter.clone();
             Proto::new(socket, &cfg,
@@ -67,8 +69,7 @@ fn main() {
                 &h1)
             .map_err(|e| { println!("Connection error: {}", e); })
         })
-        .buffer_unordered(200000)
-          .for_each(|()| Ok(()));
+        .listen(1000);
 
     lp.run(done).unwrap();
 }
