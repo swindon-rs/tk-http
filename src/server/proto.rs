@@ -138,12 +138,11 @@ impl<S, D: Dispatcher<S>> PureProto<S, D> {
                 Body(..) => self.config.inflight_request_limit-1,
                 Closed | Hijack => return Ok(changed),
             };
-            if self.waiting.len() >= limit {
-                break;
-            }
-            // TODO(tailhook) Do reads after parse_headers() [optimization]
-            if inbuf.read().map_err(ErrorEnum::Io)? > 0 {
-                self.last_byte_read = Instant::now();
+            if self.waiting.len() <= limit {
+                // TODO(tailhook) Do reads after parse_headers() [optimization]
+                if inbuf.read().map_err(ErrorEnum::Io)? > 0 {
+                    self.last_byte_read = Instant::now();
+                }
             }
             let (next, cont) = match mem::replace(&mut self.reading, Closed) {
                 KeepAlive | Connected if inbuf.in_buf.len() > 0 => {
@@ -387,6 +386,7 @@ impl<S: AsyncRead+AsyncWrite, D: Dispatcher<S>> Future for Proto<S, D> {
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use futures::{Empty, Async, empty};
     use tk_bufstream::{MockData, ReadBuf, WriteBuf};
@@ -395,23 +395,25 @@ mod test {
     use server::{Config, Dispatcher, Codec};
     use server::{Head, RecvMode, Error, Encoder, EncoderDone};
 
-    struct MockDisp {
+    struct MockDisp<'a> {
+        counter: &'a AtomicUsize,
     }
 
-    struct MockCodec {
+    struct MockCodec<'a> {
+        counter: &'a AtomicUsize,
     }
 
-    impl Dispatcher<MockData> for MockDisp {
-        type Codec = MockCodec;
+    impl<'a> Dispatcher<MockData> for MockDisp<'a> {
+        type Codec = MockCodec<'a>;
 
         fn headers_received(&mut self, _headers: &Head)
             -> Result<Self::Codec, Error>
         {
-            Ok(MockCodec {})
+            Ok(MockCodec { counter: self.counter })
         }
     }
 
-    impl Codec<MockData> for MockCodec {
+    impl<'a> Codec<MockData> for MockCodec<'a> {
         type ResponseFuture = Empty<EncoderDone<MockData>, Error>;
         fn recv_mode(&mut self) -> RecvMode {
             RecvMode::buffered_upfront(1024)
@@ -426,6 +428,7 @@ mod test {
         fn start_response(&mut self, _e: Encoder<MockData>)
             -> Self::ResponseFuture
         {
+            self.counter.fetch_add(1, Ordering::SeqCst);
             empty()
         }
         fn hijack(&mut self, _write_buf: WriteBuf<MockData>,
@@ -436,22 +439,39 @@ mod test {
 
     #[test]
     fn simple_get_request() {
+        let counter = AtomicUsize::new(0);
         let mock = MockData::new();
         let mut proto = PureProto::new(mock.clone(),
-            &Arc::new(Config::new()), MockDisp {});
+            &Arc::new(Config::new()), MockDisp { counter: &counter });
         proto.process().unwrap();
         mock.add_input("GET / HTTP/1.0\r\n\r\n");
         proto.process().unwrap();
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
 
     #[test]
     #[should_panic(expected="Version")]
     fn failing_get_request() {
+        let counter = AtomicUsize::new(0);
         let mock = MockData::new();
         let mut proto = PureProto::new(mock.clone(),
-            &Arc::new(Config::new()), MockDisp {});
+            &Arc::new(Config::new()),
+            MockDisp { counter: &counter });
         proto.process().unwrap();
         mock.add_input("GET / TTMP/2.0\r\n\r\n");
         proto.process().unwrap();
+    }
+
+    #[test]
+    fn simple_get_request_with_limit_one() {
+        let counter = AtomicUsize::new(0);
+        let mock = MockData::new();
+        let mut proto = PureProto::new(mock.clone(),
+            &Config::new().inflight_request_limit(1).done(),
+            MockDisp { counter: &counter });
+        proto.process().unwrap();
+        mock.add_input("GET / HTTP/1.0\r\n\r\n");
+        proto.process().unwrap();
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
 }
