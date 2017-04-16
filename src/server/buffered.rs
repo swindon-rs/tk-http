@@ -146,6 +146,10 @@ impl Request {
     pub fn path(&self) -> &str {
         &self.path
     }
+    /// Returns the host header of a request
+    pub fn host(&self) -> Option<&str> {
+        self.host.as_ref().map(|s| s.as_ref())
+    }
     /// Returns HTTP version used in request
     pub fn version(&self) -> Version {
         self.version
