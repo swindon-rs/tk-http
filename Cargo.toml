@@ -24,18 +24,18 @@ documentation = "https://swindon-rs.github.io/tk-http"
 
 [dependencies]
 
-futures = "0.1.7"
-httparse = "1.1.2"
-tokio-core = "0.1.6"
-tokio-io = "0.1.0"
+futures = "0.1.13"
+httparse = "1.2.2"
+tokio-core = "0.1.7"
+tokio-io = "0.1.2"
 tk-bufstream = "0.3.0"
 netbuf = "0.4.0"
-quick-error = "1.1.0"
+quick-error = "1.2.0"
 matches = "0.1.4"
-log = "0.3.6"
-url = "1.2.3"
+log = "0.3.8"
+url = "1.4.0"
 sha1 = "0.2.0"
-byteorder = "0.5.3"
+byteorder = "1.0.0"
 rand = "0.3.15"
 tk-sendfile = { version="0.4.0", optional=true }
 
@@ -44,11 +44,11 @@ default = ["sendfile"]
 sendfile = ["tk-sendfile"]
 
 [dev-dependencies]
-env_logger = "0.3.5"
+env_logger = "0.4.3"
 argparse = "0.2.1"
-futures-cpupool = "0.1.2"
-time = "0.1.35"
+futures-cpupool = "0.1.5"
+time = "0.1.37"
 tk-listen = "0.1.0"
 
-rustls = "0.5.3"
-tokio-rustls = "0.1.0"
+rustls = "0.8.0"
+tokio-rustls = "0.2.1"
