@@ -9,7 +9,7 @@ use websocket::error::ErrorEnum;
 
 
 /// A borrowed frame of websocket data
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Frame<'a> {
     /// Ping mesage
     Ping(&'a [u8]),
@@ -109,7 +109,13 @@ pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize, masked: bool)
         0x1 => Text(from_utf8(data)?),
         0x2 => Binary(data),
         // TODO(tailhook) implement shutdown packets
-        0x8 => Close(BigEndian::read_u16(&data[..2]), from_utf8(&data[2..])?),
+        0x8 => {
+            if data.len() < 2 {
+                Close(1006, "")
+            } else {
+                Close(BigEndian::read_u16(&data[..2]), from_utf8(&data[2..])?)
+            }
+        }
         x => return Err(ErrorEnum::InvalidOpcode(x)),
     };
     return Ok(Some((frame, start + size)));
@@ -176,4 +182,134 @@ pub fn write_close(buf: &mut Buf, code: u16, reason: &str, mask: bool) {
             buf[start + idx] ^= bytes[idx % 4];
         }
     };
+}
+
+#[cfg(test)]
+mod test {
+    use netbuf::Buf;
+    use std::iter::repeat;
+    use super::parse_frame;
+    use super::Frame::*;
+
+    #[test]
+    fn empty_frame() {
+        let mut buf = Buf::new();
+        assert_eq!(parse_frame(&mut buf, 1000, false).unwrap(), None);
+        assert_eq!(parse_frame(&mut buf, 1000, true).unwrap(), None);
+    }
+
+    #[test]
+    fn invalid_close_frame() {
+        let mut buf = Buf::new();
+        let data = b"\x88\x80\x00\x00\x00\x00";
+        buf.extend(data);
+        assert_eq!(parse_frame(&mut buf, 1000, true).unwrap(),
+                   Some((Close(1006, ""), 6)));
+    }
+
+    #[test]
+    fn parse_small_masked() {
+        let data = b"\x81\x85\x00\x00\x00\x00hello";
+        for i in 0..data.len()-1 {
+            let mut buf = Buf::new();
+            buf.extend(&data[..i]);
+            assert_eq!(parse_frame(&mut buf, 1000, true).unwrap(), None);
+        }
+        let mut buf = Buf::new();
+        buf.extend(data);
+        assert_eq!(parse_frame(&mut buf, 1000, true).unwrap(),
+            Some((Text("hello"), 11)));
+    }
+
+    #[test]
+    fn parse_125m() {
+        let data = b"\x81\xFD\x00\x00\x00\x00";
+        for i in 0..124 {
+            let mut buf = Buf::new();
+            buf.extend(data);
+            for _ in 0..i {
+                buf.extend(&[b'x']);
+            }
+            assert_eq!(parse_frame(&mut buf, 1000, true).unwrap(), None);
+        }
+        let mut buf = Buf::new();
+        buf.extend(data);
+        for _ in 0..125 {
+            buf.extend(&[b'x']);
+        }
+        assert_eq!(parse_frame(&mut buf, 1000, true).unwrap(),
+            Some((Text(&repeat('x').take(125).collect::<String>()), 131)));
+    }
+    #[test]
+    fn parse_4k_masked() {
+        let data = b"\x81\xFE\x10\x00\x00\x00\x00\x00";
+        for i in 0..4095 {
+            let mut buf = Buf::new();
+            buf.extend(data);
+            for _ in 0..i {
+                buf.extend(&[b'x']);
+            }
+            assert_eq!(parse_frame(&mut buf, 4096, true).unwrap(), None);
+        }
+        let mut buf = Buf::new();
+        buf.extend(data);
+        for _ in 0..4096 {
+            buf.extend(&[b'x']);
+        }
+        assert_eq!(parse_frame(&mut buf, 4096, true).unwrap(),
+            Some((Text(&repeat('x').take(4096).collect::<String>()), 4104)));
+    }
+
+    #[test]
+    fn parse_small() {
+        let data = b"\x81\x05hello";
+        for i in 0..data.len()-1 {
+            let mut buf = Buf::new();
+            buf.extend(&data[..i]);
+            assert_eq!(parse_frame(&mut buf, 1000, false).unwrap(), None);
+        }
+        let mut buf = Buf::new();
+        buf.extend(data);
+        assert_eq!(parse_frame(&mut buf, 1000, false).unwrap(),
+            Some((Text("hello"), 7)));
+    }
+
+    #[test]
+    fn parse_125() {
+        let data = b"\x81\x7D";
+        for i in 0..124 {
+            let mut buf = Buf::new();
+            buf.extend(data);
+            for _ in 0..i {
+                buf.extend(&[b'x']);
+            }
+            assert_eq!(parse_frame(&mut buf, 1000, false).unwrap(), None);
+        }
+        let mut buf = Buf::new();
+        buf.extend(data);
+        for _ in 0..125 {
+            buf.extend(&[b'x']);
+        }
+        assert_eq!(parse_frame(&mut buf, 1000, false).unwrap(),
+            Some((Text(&repeat('x').take(125).collect::<String>()), 127)));
+    }
+    #[test]
+    fn parse_4k() {
+        let data = b"\x81\x7E\x10\x00";
+        for i in 0..4095 {
+            let mut buf = Buf::new();
+            buf.extend(data);
+            for _ in 0..i {
+                buf.extend(&[b'x']);
+            }
+            assert_eq!(parse_frame(&mut buf, 4096, false).unwrap(), None);
+        }
+        let mut buf = Buf::new();
+        buf.extend(data);
+        for _ in 0..4096 {
+            buf.extend(&[b'x']);
+        }
+        assert_eq!(parse_frame(&mut buf, 4096, false).unwrap(),
+            Some((Text(&repeat('x').take(4096).collect::<String>()), 4100)));
+    }
 }
