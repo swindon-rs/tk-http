@@ -213,9 +213,8 @@ impl<S: AsyncRead + AsyncWrite, C: Codec<S>> Sink for PureProto<S, C> {
                     matches!(self.reading, InState::Idle(..))
                 {
                     // Too dangerous to send request now
-                    return Ok(AsyncSink::NotReady(item));
-                }
-                if self.close.load(Ordering::SeqCst) {
+                    (AsyncSink::NotReady(item), OutState::Idle(io, time))
+                } else if self.close.load(Ordering::SeqCst) {
                     // TODO(tailhook) maybe shutdown?
                     io.flush().map_err(ErrorEnum::Io)?;
                     (AsyncSink::NotReady(item), OutState::Idle(io, time))
