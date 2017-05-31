@@ -64,6 +64,7 @@ quick_error! {
         }
         Custom(err: Box<::std::error::Error + Send + Sync>) {
             description("custom error")
+            display("custom error: {}", e)
             cause(&**err)
         }
     }
