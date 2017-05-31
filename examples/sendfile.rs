@@ -57,24 +57,29 @@ fn main() {
 
     let done = listener.incoming()
         .sleep_on_error(Duration::from_millis(100), &lp.handle())
-        .map(|(socket, addr)| {
+        .map(move |(socket, addr)| {
+            let filename = filename.clone();
+            let disk_pool = disk_pool.clone();
             Proto::new(socket, &cfg,
-                BufferedDispatcher::new(addr, &h1, || |_, mut e: Encoder<_>| {
-
-                    disk_pool.open(filename.clone())
-                    .and_then(move |file| {
-                        e.status(Status::Ok);
-                        e.add_length(file.size()).unwrap();
-                        if e.done_headers().unwrap() {
-                            e.raw_body()
-                            .and_then(|raw_body| file.write_into(raw_body))
-                            .map(|raw_body| raw_body.done())
-                            .boxed()
-                        } else {
-                            ok(e.done()).boxed()
-                        }
-                    })
-                    .map_err(|_| -> Error { unimplemented!(); })
+                BufferedDispatcher::new(addr, &h1, move || {
+                    let filename = filename.clone();
+                    let disk_pool = disk_pool.clone();
+                    move |_, mut e: Encoder<_>| {
+                        disk_pool.open(filename.clone())
+                        .and_then(move |file| {
+                            e.status(Status::Ok);
+                            e.add_length(file.size()).unwrap();
+                            if e.done_headers().unwrap() {
+                                e.raw_body()
+                                .and_then(|raw_body| file.write_into(raw_body))
+                                .map(|raw_body| raw_body.done())
+                                .boxed()
+                            } else {
+                                ok(e.done()).boxed()
+                            }
+                        })
+                        .map_err(|_| -> Error { unimplemented!(); })
+                    }
                 }),
                 &h1)
             .map_err(|e| { println!("Connection error: {}", e); })
