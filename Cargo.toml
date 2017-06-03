@@ -52,3 +52,6 @@ tk-listen = "0.1.0"
 
 rustls = "0.8.0"
 tokio-rustls = "0.2.1"
+
+native-tls = "0.1"
+tokio-tls = "0.1"
