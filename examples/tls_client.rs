@@ -29,10 +29,13 @@ pub fn main() {
     }
     env_logger::init().unwrap();
 
+    let host = "www.rust-lang.org";
+    let uri = ["https://", host, "/documentation.html"].join("");
+
     let mut lp = tokio_core::reactor::Core::new().expect("loop created");
     let handle = lp.handle();
     let h2 = lp.handle();
-    let addr = ("google.com", 443).to_socket_addrs()
+    let addr = (host, 443).to_socket_addrs()
         .expect("resolve address").next().expect("at least one IP");
     let config = Arc::new({
         let mut cfg = ClientConfig::new();
@@ -44,11 +47,11 @@ pub fn main() {
     });
     let response = lp.run(futures::lazy(move || {
         TcpStream::connect(&addr, &handle)
-        .and_then(move |sock| config.connect_async("google.com", sock))
+        .and_then(move |sock| config.connect_async(host, sock))
         .map_err(|e| error!("{}", e))
         .and_then(move |sock| {
             let (codec, receiver) = Buffered::get(
-                "https://rust-lang.org".parse().unwrap());
+                uri.parse().unwrap());
             let proto = Proto::new(sock, &h2, &Arc::new(Config::new()));
             proto.send(codec)
             .join(receiver.map_err(|_| -> Error { unimplemented!() }))
