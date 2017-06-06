@@ -4,8 +4,8 @@ extern crate futures;
 extern crate tk_http;
 extern crate tokio_core;
 extern crate url;
-extern crate rustls;
-extern crate tokio_rustls;
+extern crate native_tls;
+extern crate tokio_tls;
 
 #[macro_use] extern crate log;
 
@@ -16,9 +16,9 @@ use std::net::ToSocketAddrs;
 use std::sync::Arc;
 
 use futures::{Future, Sink};
-use rustls::ClientConfig;
+use native_tls::TlsConnector;
 use tokio_core::net::TcpStream;
-use tokio_rustls::ClientConfigExt;
+use tokio_tls::TlsConnectorExt;
 use tk_http::client::buffered::{Buffered};
 use tk_http::client::{Proto, Config, Error};
 
@@ -37,17 +37,15 @@ pub fn main() {
     let h2 = lp.handle();
     let addr = (host, 443).to_socket_addrs()
         .expect("resolve address").next().expect("at least one IP");
-    let config = Arc::new({
-        let mut cfg = ClientConfig::new();
-        let mut pem = BufReader::new(
-            File::open("/etc/ssl/certs/ca-certificates.crt")
-            .expect("certificates exist"));
-        cfg.root_store.add_pem_file(&mut pem).unwrap();
-        cfg
-    });
+
+    let cx = TlsConnector::builder().unwrap().build().unwrap();
     let response = lp.run(futures::lazy(move || {
         TcpStream::connect(&addr, &handle)
-        .and_then(move |sock| config.connect_async(host, sock))
+        .and_then(move |sock| {
+            cx.connect_async(host, sock).map_err(|e| {
+                io::Error::new(io::ErrorKind::Other, e)
+            })
+        })
         .map_err(|e| error!("{}", e))
         .and_then(move |sock| {
             let (codec, receiver) = Buffered::get(
