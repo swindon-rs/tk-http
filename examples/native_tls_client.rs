@@ -9,9 +9,8 @@ extern crate tokio_tls;
 
 #[macro_use] extern crate log;
 
-use std::io::{self, Write, BufReader};
+use std::io::{self, Write};
 use std::env;
-use std::fs::File;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 
