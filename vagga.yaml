@@ -32,6 +32,7 @@ containers:
       - build-essential
       - zlib1g-dev
       - libssl-dev
+      - pkg-config
       - libcurl4-openssl-dev
 
     - !TarInstall
