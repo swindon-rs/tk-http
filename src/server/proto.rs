@@ -399,6 +399,10 @@ mod test {
         counter: &'a AtomicUsize,
     }
 
+    struct MockWs<'a> {
+        websockets: &'a AtomicUsize,
+    }
+
     struct MockCodec<'a> {
         counter: &'a AtomicUsize,
     }
@@ -410,6 +414,21 @@ mod test {
             -> Result<Self::Codec, Error>
         {
             Ok(MockCodec { counter: self.counter })
+        }
+    }
+
+    impl<'a> Dispatcher<MockData> for MockWs<'a> {
+        type Codec = MockCodec<'a>;
+
+        fn headers_received(&mut self, headers: &Head)
+            -> Result<Self::Codec, Error>
+        {
+            if headers.get_websocket_upgrade().unwrap().is_some() {
+                self.websockets.fetch_add(1, Ordering::SeqCst);
+                Ok(MockCodec { counter: self.websockets })
+            } else {
+                Ok(MockCodec { counter: self.websockets })
+            }
         }
     }
 
@@ -473,5 +492,48 @@ mod test {
         mock.add_input("GET / HTTP/1.0\r\n\r\n");
         proto.process().unwrap();
         assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn websocket() {
+        let counter = AtomicUsize::new(0);
+        let mock = MockData::new();
+        let mut proto = PureProto::new(mock.clone(),
+            &Config::new().inflight_request_limit(1).done(),
+            MockWs { websockets: &counter });
+        proto.process().unwrap();
+        mock.add_input("GET /chat HTTP/1.1\r\n\
+            Host: server.example.com\r\n\
+            Upgrade: websocket\r\n\
+            Connection: Upgrade\r\n\
+            Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n\
+            Sec-WebSocket-Protocol: chat, superchat\r\n\
+            Sec-WebSocket-Version: 13\r\n\
+            Origin: http://example.com\r\n\r\n");
+        proto.process().unwrap();
+        // counts as a request and as a websocket
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn websocket_with_keepalive() {
+        let counter = AtomicUsize::new(0);
+        let mock = MockData::new();
+        let mut proto = PureProto::new(mock.clone(),
+            &Config::new().inflight_request_limit(1).done(),
+            MockWs { websockets: &counter });
+        proto.process().unwrap();
+        mock.add_input("GET /chat HTTP/1.1\r\n\
+            Host: server.example.com\r\n\
+            Upgrade: websocket\r\n\
+            Connection: keep-alive, Upgrade\r\n\
+            Keep-Alive: some thing\r\n\
+            Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n\
+            Sec-WebSocket-Protocol: chat, superchat\r\n\
+            Sec-WebSocket-Version: 13\r\n\
+            Origin: http://example.com\r\n\r\n");
+        proto.process().unwrap();
+        // counts as a request and as a websocket
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
 }

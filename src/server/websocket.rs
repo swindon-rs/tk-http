@@ -30,7 +30,7 @@ fn bytes_trim(mut x: &[u8]) -> &[u8] {
 
 pub fn get_handshake(req: &Head) -> Result<Option<WebsocketHandshake>, ()> {
     let conn_upgrade = req.connection_header().map(|x| {
-        x.split(',').any(|tok| tok.eq_ignore_ascii_case("upgrade"))
+        x.split(',').any(|tok| tok.trim().eq_ignore_ascii_case("upgrade"))
     });
     if !conn_upgrade.unwrap_or(false) {
         return Ok(None);
