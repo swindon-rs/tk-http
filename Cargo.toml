@@ -1,6 +1,6 @@
 [package]
 name = "tk-http"
-version = "0.2.6"
+version = "0.2.7"
 description = """
     A full-features asynchronous HTTP implementation for tokio-rs stack,
     including websockets.
