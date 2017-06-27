@@ -217,30 +217,33 @@ impl<S, C: Codec<S>> Parser<S, C> {
                 ref close_signal,
             } = self.state
         {
-            if io.read().map_err(ErrorEnum::Io)? == 0 {
-                if io.done() {
-                    return Err(ErrorEnum::ResetOnResponseHeaders.into());
-                } else {
-                    return Ok(Async::NotReady);
-                }
-            }
-            let reqs = request_state.load(Ordering::SeqCst);
-            if reqs == RequestState::Empty as usize {
-                return Err(ErrorEnum::PrematureResponseHeaders.into());
-            }
-            let is_head = reqs == RequestState::StartedHead as usize;
-            match parse_headers(&mut io.in_buf, &mut self.codec, is_head)? {
-                None => {
-                    return Ok(Async::NotReady);
-                }
-                Some((body, close)) => {
-                    if close {
-                        close_signal.store(true, Ordering::SeqCst);
-                        self.close = true;
+            let state;
+            loop {
+                if io.read().map_err(ErrorEnum::Io)? == 0 {
+                    if io.done() {
+                        return Err(ErrorEnum::ResetOnResponseHeaders.into());
+                    } else {
+                        return Ok(Async::NotReady);
                     }
-                    body
-                },
-            }
+                }
+                let reqs = request_state.load(Ordering::SeqCst);
+                if reqs == RequestState::Empty as usize {
+                    return Err(ErrorEnum::PrematureResponseHeaders.into());
+                }
+                let is_head = reqs == RequestState::StartedHead as usize;
+                match parse_headers(&mut io.in_buf, &mut self.codec, is_head)? {
+                    None => continue,
+                    Some((body, close)) => {
+                        if close {
+                            close_signal.store(true, Ordering::SeqCst);
+                            self.close = true;
+                        }
+                        state = body;
+                        break
+                    },
+                }
+            };
+            state
         } else {
             // TODO(tailhook) optimize this
             self.state.clone()
