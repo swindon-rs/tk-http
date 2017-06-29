@@ -18,6 +18,11 @@ quick_error! {
             display("IO error: {}", err)
             from()
         }
+        /// Error when polling timeout future (unreachable)
+        Timeout {
+            description("Timeout error (unreachable)")
+            display("Timeout error (unreachable)")
+        }
         /// Text frame can't be decoded
         InvalidUtf8(err: Utf8Error) {
             description("Error decoding text frame")

@@ -17,7 +17,8 @@ impl Config {
     /// Default is 10 seconds.
     ///
     /// If no messages have been received within this interval, we send
-    /// a ping message.
+    /// a ping message. Only full messages are accounted. If some large
+    /// frame is being received for this long, we still send ping.
     ///
     /// Note: you can't remove the interval, but you can set it to
     /// a sufficiently large value.
@@ -35,6 +36,11 @@ impl Config {
     ///
     /// A connection is shut down if no messages were received during this
     /// interval.
+    ///
+    /// Note: only full frames are accounted. If some very large frame is
+    /// being sent too long, we drop the connection. So be sure to set this
+    /// value large enough so that slowest client can send largest frame and
+    /// another ping.
     ///
     /// There are two use cases for this interval:
     ///

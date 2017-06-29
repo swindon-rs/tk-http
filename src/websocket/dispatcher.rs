@@ -1,5 +1,7 @@
+use std::cmp::min;
 use std::fmt;
 use std::sync::Arc;
+use std::time::Instant;
 
 use futures::{Future, Async, Stream};
 use futures::future::{FutureResult, ok};
@@ -7,6 +9,7 @@ use futures::stream;
 use tk_bufstream::{ReadFramed, WriteFramed, ReadBuf, WriteBuf};
 use tk_bufstream::{Encode};
 use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_core::reactor::{Handle, Timeout};
 
 use websocket::{Frame, Config, Packet, Error, ServerCodec, ClientCodec};
 use websocket::error::ErrorEnum;
@@ -41,6 +44,9 @@ pub struct Loop<S, T, D: Dispatcher> {
     backpressure: Option<D::Future>,
     state: LoopState,
     server: bool,
+    handle: Handle,
+    last_message_received: Instant,
+    ping_timeout: Timeout,
 }
 
 
@@ -73,7 +79,8 @@ impl<S, T, D, E> Loop<S, T, D>
     pub fn server(
         outp: WriteFramed<S, ServerCodec>,
         inp: ReadFramed<S, ServerCodec>,
-        stream: T, dispatcher: D, config: &Arc<Config>)
+        stream: T, dispatcher: D, config: &Arc<Config>,
+        handle: &Handle)
         -> Loop<S, T, D>
     {
         Loop {
@@ -85,6 +92,12 @@ impl<S, T, D, E> Loop<S, T, D>
             backpressure: None,
             state: LoopState::Open,
             server: true,
+            handle: handle.clone(),
+            last_message_received: Instant::now(),
+            // Note: we expect that loop is polled immediately, so timeout
+            // is polled too
+            ping_timeout: Timeout::new(config.ping_interval, handle)
+                .expect("Can always set timeout"),
         }
     }
     /// Create a new websocket Loop (client-side)
@@ -93,7 +106,7 @@ impl<S, T, D, E> Loop<S, T, D>
     pub fn client(
         outp: WriteFramed<S, ClientCodec>,
         inp: ReadFramed<S, ClientCodec>,
-        stream: T, dispatcher: D, config: &Arc<Config>)
+        stream: T, dispatcher: D, config: &Arc<Config>, handle: &Handle)
         -> Loop<S, T, D>
     {
         Loop {
@@ -105,6 +118,12 @@ impl<S, T, D, E> Loop<S, T, D>
             backpressure: None,
             state: LoopState::Open,
             server: false,
+            handle: handle.clone(),
+            last_message_received: Instant::now(),
+            // Note: we expect that loop is polled immediately, so timeout
+            // is polled too
+            ping_timeout: Timeout::new(config.ping_interval, handle)
+                .expect("Can always set timeout"),
         }
     }
 }
@@ -129,7 +148,8 @@ impl<S> Loop<S, stream::Empty<Packet, VoidError>, BlackHole>
         outp: WriteFramed<S, ServerCodec>,
         inp: ReadFramed<S, ServerCodec>,
         reason: u16, text: &str,
-        config: &Arc<Config>)
+        config: &Arc<Config>,
+        handle: &Handle)
         -> Loop<S, stream::Empty<Packet, VoidError>, BlackHole>
     {
         let mut out = outp.into_inner();
@@ -144,6 +164,12 @@ impl<S> Loop<S, stream::Empty<Packet, VoidError>, BlackHole>
             state: LoopState::CloseSent,
             // TODO(tailhook) should we provide client-size thing?
             server: true,
+            handle: handle.clone(),
+            last_message_received: Instant::now(),
+            // Note: we expect that loop is polled immediately, so timeout
+            // is polled too
+            ping_timeout: Timeout::new(config.inactivity_timeout, handle)
+                .expect("Can always set timeout"),
         }
     }
 }
@@ -151,6 +177,7 @@ impl<S> Loop<S, stream::Empty<Packet, VoidError>, BlackHole>
 impl<S, T, D, E> Loop<S, T, D>
     where T: Stream<Item=Packet, Error=E>,
           D: Dispatcher,
+          S: AsyncRead + AsyncWrite,
 {
     fn read_stream(&mut self) -> Result<(), E> {
         if self.state == LoopState::CloseSent {
@@ -197,35 +224,19 @@ impl<S, T, D, E> Loop<S, T, D>
         self.stream = None;
         Ok(())
     }
-}
-
-impl<S, T, D, E> Future for Loop<S, T, D>
-    where T: Stream<Item=Packet, Error=E>,
-          D: Dispatcher,
-          E: fmt::Display,
-          S: AsyncRead + AsyncWrite,
-{
-    type Item = ();  // TODO(tailhook) void?
-    type Error = Error;
-
-    fn poll(&mut self) -> Result<Async<()>, Error> {
-        self.read_stream()
-            .map_err(|e| error!("Can't read from stream: {}", e)).ok();
-        self.output.flush().map_err(ErrorEnum::Io)?;
-        if self.state == LoopState::Done {
-            return Ok(Async::Ready(()));
-        }
-
+    /// Returns number of messages read
+    fn read_messages(&mut self) -> Result<usize, Error> {
         if let Some(mut back) = self.backpressure.take() {
             match back.poll()? {
                 Async::Ready(()) => {}
                 Async::NotReady => {
                     self.backpressure = Some(back);
-                    return Ok(Async::NotReady);
+                    return Ok(0);
                 }
             }
         }
 
+        let mut nmessages = 0;
         loop {
             while self.input.in_buf.len() > 0 {
                 let (fut, nbytes) = match
@@ -233,6 +244,7 @@ impl<S, T, D, E> Future for Loop<S, T, D>
                                 self.config.max_packet_size, self.server)?
                 {
                     Some((frame, nbytes)) => {
+                        nmessages += 1;
                         let fut = match frame {
                             Frame::Ping(data) => {
                                 trace!("Received ping {:?}", data);
@@ -261,14 +273,14 @@ impl<S, T, D, E> Future for Loop<S, T, D>
                 };
                 self.input.in_buf.consume(nbytes);
                 if self.state == LoopState::Done {
-                    return Ok(Async::Ready(()));
+                    return Ok(nmessages);
                 }
                 if let Some(mut fut) = fut {
                     match fut.poll()? {
                         Async::Ready(()) => {},
                         Async::NotReady => {
                             self.backpressure = Some(fut);
-                            return Ok(Async::NotReady);
+                            return Ok(nmessages);
                         }
                     }
                 }
@@ -276,14 +288,73 @@ impl<S, T, D, E> Future for Loop<S, T, D>
             match self.input.read().map_err(ErrorEnum::Io)? {
                 0 => {
                     if self.input.done() {
-                        return Ok(Async::Ready(()));
-                    } else {
-                        return Ok(Async::NotReady);
+                        self.state = LoopState::Done;
                     }
+                    return Ok(nmessages);
                 }
                 _ => continue,
             }
         }
+    }
+}
+
+impl<S, T, D, E> Future for Loop<S, T, D>
+    where T: Stream<Item=Packet, Error=E>,
+          D: Dispatcher,
+          E: fmt::Display,
+          S: AsyncRead + AsyncWrite,
+{
+    type Item = ();  // TODO(tailhook) void?
+    type Error = Error;
+
+    fn poll(&mut self) -> Result<Async<()>, Error> {
+        self.read_stream()
+            .map_err(|e| error!("Can't read from stream: {}", e)).ok();
+        self.output.flush().map_err(ErrorEnum::Io)?;
+        if self.state == LoopState::Done {
+            return Ok(Async::Ready(()));
+        }
+        if self.read_messages()? > 0 {
+            self.last_message_received = Instant::now();
+            self.ping_timeout = Timeout::new_at(
+                self.last_message_received + self.config.ping_interval,
+                &self.handle,
+            ).expect("can always set timeout");
+        }
+        loop {
+            match self.ping_timeout.poll().map_err(|_| ErrorEnum::Timeout)? {
+                Async::Ready(()) => {
+                    debug!("Sending ping");
+                    write_packet(&mut self.output.out_buf,
+                                 0x9, b"swindon-ping", !self.server);
+                    self.output.flush().map_err(ErrorEnum::Io)?;
+                    let deadline = Instant::now() -
+                        self.config.inactivity_timeout;
+                    if self.last_message_received < deadline {
+                        self.state = LoopState::Done;
+                        return Ok(Async::Ready(()));
+                    } else {
+                        self.ping_timeout = Timeout::new_at(
+                            min(self.last_message_received
+                                + self.config.inactivity_timeout,
+                                Instant::now() + self.config.ping_interval),
+                            &self.handle)
+                            .expect("can always set timeout");
+                        match self.ping_timeout.poll()
+                              .map_err(|_| ErrorEnum::Timeout)?
+                        {
+                            Async::NotReady => break,
+                            Async::Ready(()) => continue,
+                        }
+                    }
+                }
+                Async::NotReady => break,
+            }
+        }
+        if self.state == LoopState::Done {
+            return Ok(Async::Ready(()));
+        }
+        return Ok(Async::NotReady);
     }
 }
 
