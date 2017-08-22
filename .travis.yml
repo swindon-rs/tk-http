@@ -8,17 +8,6 @@ cache:
 before_cache:
 - rm -r $TRAVIS_BUILD_DIR/target/debug
 
-matrix:
-  include:
-  - os: linux
-    rust: stable
-  - os: linux
-    rust: beta
-  - os: linux
-    rust: nightly
-  - os: osx
-    rust: stable
-
 jobs:
   include:
   - os: linux
