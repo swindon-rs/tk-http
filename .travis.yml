@@ -32,6 +32,8 @@ jobs:
 
   # deploy
   - stage: publish
+    os: linux
+    rust: stable
     env:
     # CARGO_TOKEN
     - secure: "nDgGEaK9cHF2n3aT7KiKxrDhwdPGS9DvQ7RunpqS78uctuWMmR/gPrVLVu/y6VM/o4XgVDQwcou5I+ac6XpqhEDdrv86QsoFdF/8w57Vd3ifmUp9n0VQWs0GEy6M/mlJxt0vjyCfJar1c9lv0fXLfJUxuISPRJsIyKKiRGnII6SIinHWpLEFbj6R2An+Qn9qIG8jMUJd4yKNmL3dk4jXL2Yw+yKoEi+ykgY/OELPATDdDUmvwigFTlqKDV2UPqsuEQBh1vfRLvf8+fh+a64aJy+yLC0Jem8PsMGrZQUC/N+GfqAECx31s4rrLDIunp/szCERVr5AkqDOFUmh5+oL0835yweRT9UQYOFYIbEVkB7758Hz4yDILeKBFWXExXlgpAsVoMahJiKE7UYgQyRB3GMFCqkkV4tq+/tmrk6uP8avTaD6JNp9yXqT3uPRKzY5wxc10FzSaUThq88EmyTFu/AS6J85wsrhoD1FDkdVa2vD4e97mqCPFhVsTLiVNknrjSfMDSDD5HdyMa3cCNKcx36DJvGOTDbQaz8r1R5bLDdOAUAFOjK8F7uC+S3Vs68tXQ1B2TOeahD5FcTXch2MC3NCfg2AOG6A2iQZdgF7bwHrJuz2pPhQXNjtyQJoidxM2g38beYYhRdNuEqX6DhnsCQd8tH7zpjd1MqFtPtyl+M="
