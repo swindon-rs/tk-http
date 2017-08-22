@@ -251,6 +251,26 @@ impl<S> Encoder<S> {
         assert!(self.state.is_after_headers());
         FutureRawBody(self.io.borrow_raw())
     }
+
+    /// Flush the data to underlying socket
+    ///
+    /// If the whole buffer could not be flushed it schedules a wakeup of
+    /// the current task when the the socket is writable.
+    ///
+    /// You can find out how many bytes are left using `bytes_buffered()`
+    /// method
+    pub fn flush(&mut self) -> Result<(), io::Error>
+        where S: AsyncWrite
+    {
+        self.io.flush()
+    }
+    /// Returns bytes currently lying in the buffer
+    ///
+    /// It's possible that these bytes are left from the previous request if
+    /// pipelining is enabled.
+    pub fn bytes_buffered(&mut self) -> usize {
+        self.io.out_buf.len()
+    }
 }
 
 impl<S> RawBody<S> {

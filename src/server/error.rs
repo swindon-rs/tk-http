@@ -84,6 +84,12 @@ impl Error {
     }
 }
 
+impl From<io::Error> for Error {
+    fn from(v: io::Error) -> Error {
+        ErrorEnum::from(v).into()
+    }
+}
+
 #[test]
 fn send_sync() {
     fn send_sync<T: Send+Sync>(_: T) {}
