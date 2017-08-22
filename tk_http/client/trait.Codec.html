@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Codec` trait in crate `tk_http`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Codec">
+
+    <title>tk_http::client::Codec - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc trait">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'>Trait Codec</p><div class="block items"><ul><li><a href="#associated-types">Associated Types</a></li><li><a href="#required-methods">Required Methods</a></li><li><a href="#implementors">Implementors</a></li></ul></div><p class='location'><a href='../index.html'>tk_http</a>::<wbr><a href='index.html'>client</a></p><script>window.sidebarCurrent = {name: 'Codec', ty: 'trait', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content">
+<h1 class='fqn'><span class='in-band'>Trait <a href='../index.html'>tk_http</a>::<wbr><a href='index.html'>client</a>::<wbr><a class="trait" href=''>Codec</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../../src/tk_http/client/client.rs.html#26-73' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait Codec&lt;S&gt; {
+    type <a href='#associatedtype.Future' class="type">Future</a>: <a class="trait" href="https://docs.rs/futures/0.1/futures/future/trait.Future.html" title="trait futures::future::Future">Future</a>&lt;Item = <a class="struct" href="../../tk_http/client/struct.EncoderDone.html" title="struct tk_http::client::EncoderDone">EncoderDone</a>&lt;S&gt;, Error = <a class="struct" href="../../tk_http/client/struct.Error.html" title="struct tk_http::client::Error">Error</a>&gt;;
+    fn <a href='#tymethod.start_write' class='fnname'>start_write</a>(&amp;mut self, e: <a class="struct" href="../../tk_http/client/struct.Encoder.html" title="struct tk_http::client::Encoder">Encoder</a>&lt;S&gt;) -&gt; Self::<a class="trait" href="../../tk_http/client/trait.Codec.html" title="trait tk_http::client::Codec">Future</a>;
+    fn <a href='#tymethod.headers_received' class='fnname'>headers_received</a>(&amp;mut self, headers: &amp;<a class="struct" href="../../tk_http/client/struct.Head.html" title="struct tk_http::client::Head">Head</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="../../tk_http/client/struct.RecvMode.html" title="struct tk_http::client::RecvMode">RecvMode</a>, <a class="struct" href="../../tk_http/client/struct.Error.html" title="struct tk_http::client::Error">Error</a>&gt;;
+    fn <a href='#tymethod.data_received' class='fnname'>data_received</a>(<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&amp;mut self, <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;data: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">&amp;[</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u8.html">u8</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">]</a>, <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;end: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a><br>&nbsp;&nbsp;&nbsp;&nbsp;) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="enum" href="https://docs.rs/futures/0.1/futures/poll/enum.Async.html" title="enum futures::poll::Async">Async</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.usize.html">usize</a>&gt;, <a class="struct" href="../../tk_http/client/struct.Error.html" title="struct tk_http::client::Error">Error</a>&gt;;
+}</pre><div class='docblock'><p>This is a low-level interface to the http client</p>
+
+<p>Your requests starts by sending a codec into a connection Sink or a
+connection pool. And then it&#39;s driven by a callbacks here.</p>
+
+<p>If you don&#39;t have any special needs you might want to use
+<code>client::buffered::Buffered</code> codec implementation instead of implemeting
+this trait manually.</p>
+</div>
+            <h2 id='associated-types'>Associated Types</h2>
+            <div class='methods'>
+        <h3 id='associatedtype.Future' class='method'><span id='Future.t' class='invisible'><code>type <a href='#associatedtype.Future' class="type">Future</a>: <a class="trait" href="https://docs.rs/futures/0.1/futures/future/trait.Future.html" title="trait futures::future::Future">Future</a>&lt;Item = <a class="struct" href="../../tk_http/client/struct.EncoderDone.html" title="struct tk_http::client::EncoderDone">EncoderDone</a>&lt;S&gt;, Error = <a class="struct" href="../../tk_http/client/struct.Error.html" title="struct tk_http::client::Error">Error</a>&gt;</code></span></h3><div class='docblock'><p>Future that <code>start_write()</code> returns</p>
+</div></div>
+            <h2 id='required-methods'>Required Methods</h2>
+            <div class='methods'>
+        <h3 id='tymethod.start_write' class='method'><span id='start_write.v' class='invisible'><code>fn <a href='#tymethod.start_write' class='fnname'>start_write</a>(&amp;mut self, e: <a class="struct" href="../../tk_http/client/struct.Encoder.html" title="struct tk_http::client::Encoder">Encoder</a>&lt;S&gt;) -&gt; Self::<a class="trait" href="../../tk_http/client/trait.Codec.html" title="trait tk_http::client::Codec">Future</a></code></span></h3><div class='docblock'><p>Start writing a request</p>
+
+<p>This method is called when there is an open connection and there
+is some space in the output buffer.</p>
+
+<p>Everything you write into a buffer might be flushed to the network
+immediately (or as fast as you yield to main loop). On the other
+hand we might buffer/pipeline multiple requests at once.</p>
+</div><h3 id='tymethod.headers_received' class='method'><span id='headers_received.v' class='invisible'><code>fn <a href='#tymethod.headers_received' class='fnname'>headers_received</a>(&amp;mut self, headers: &amp;<a class="struct" href="../../tk_http/client/struct.Head.html" title="struct tk_http::client::Head">Head</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="../../tk_http/client/struct.RecvMode.html" title="struct tk_http::client::RecvMode">RecvMode</a>, <a class="struct" href="../../tk_http/client/struct.Error.html" title="struct tk_http::client::Error">Error</a>&gt;</code></span></h3><div class='docblock'><p>Received headers of a response</p>
+
+<p>At this point we already extracted all the headers and other data
+that we need to ensure correctness of the protocol. If you need
+to handle some data from the headers you need to store them somewhere
+(for example on <code>self</code>) for further processing.</p>
+
+<p>Note: headers might be received after <code>request_line</code> is written, but
+we don&#39;t ensure that request is fully written. You should write the
+state machine as if request and response might be streamed a the
+same time (including request headers (!) if your <code>start_write</code> future
+writes them incrementally)</p>
+</div><h3 id='tymethod.data_received' class='method'><span id='data_received.v' class='invisible'><code>fn <a href='#tymethod.data_received' class='fnname'>data_received</a>(<br>&nbsp;&nbsp;&nbsp;&nbsp;&amp;mut self, <br>&nbsp;&nbsp;&nbsp;&nbsp;data: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">&amp;[</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u8.html">u8</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">]</a>, <br>&nbsp;&nbsp;&nbsp;&nbsp;end: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a><br>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="enum" href="https://docs.rs/futures/0.1/futures/poll/enum.Async.html" title="enum futures::poll::Async">Async</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.usize.html">usize</a>&gt;, <a class="struct" href="../../tk_http/client/struct.Error.html" title="struct tk_http::client::Error">Error</a>&gt;</code></span></h3><div class='docblock'><p>Chunk of the response body received</p>
+
+<p><code>end</code> equals to <code>true</code> for the last chunk of the data.</p>
+
+<p>Method returns <code>Async::Ready(x)</code> to denote that it has consumed <code>x</code>
+bytes. If there are some bytes left in the buffer they will be passed
+again on the call.</p>
+
+<p>If the response is empty, or last chunk arrives later and it&#39;s empty
+we call <code>c.data_received(b&quot;&quot;, true)</code> on every wakeup,
+until <code>Async::Ready(0)</code> is returned (this helps to drive future that
+might complete on request completion without spawning another ones,
+but note that next request can&#39;t start reading in the meantime).</p>
+
+<p>Protocol panics if returned number of bytes larger than <code>data.len()</code>.</p>
+</div></div>
+        <h2 id='implementors'>Implementors</h2>
+        <ul class='item-list' id='implementors-list'>
+    <li><code>impl&lt;S, F&gt; Codec&lt;S&gt; for <a class="struct" href="https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;<a class="trait" href="../../tk_http/client/trait.Codec.html" title="trait tk_http::client::Codec">Codec</a>&lt;S, Future = F&gt;&gt; <span class="where fmt-newline">where<br>&nbsp;&nbsp;&nbsp;&nbsp;F: <a class="trait" href="https://docs.rs/futures/0.1/futures/future/trait.Future.html" title="trait futures::future::Future">Future</a>&lt;Item = <a class="struct" href="../../tk_http/client/struct.EncoderDone.html" title="struct tk_http::client::EncoderDone">EncoderDone</a>&lt;S&gt;, Error = <a class="struct" href="../../tk_http/client/struct.Error.html" title="struct tk_http::client::Error">Error</a>&gt;,&nbsp;</span></code></li>
+<li><code>impl&lt;S, F&gt; Codec&lt;S&gt; for <a class="struct" href="https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;<a class="trait" href="../../tk_http/client/trait.Codec.html" title="trait tk_http::client::Codec">Codec</a>&lt;S, Future = F&gt; + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a>&gt; <span class="where fmt-newline">where<br>&nbsp;&nbsp;&nbsp;&nbsp;F: <a class="trait" href="https://docs.rs/futures/0.1/futures/future/trait.Future.html" title="trait futures::future::Future">Future</a>&lt;Item = <a class="struct" href="../../tk_http/client/struct.EncoderDone.html" title="struct tk_http::client::EncoderDone">EncoderDone</a>&lt;S&gt;, Error = <a class="struct" href="../../tk_http/client/struct.Error.html" title="struct tk_http::client::Error">Error</a>&gt;,&nbsp;</span></code></li>
+<li><code>impl&lt;S&gt; Codec&lt;S&gt; for <a class="struct" href="../../tk_http/client/buffered/struct.Buffered.html" title="struct tk_http::client::buffered::Buffered">Buffered</a></code></li>
+</ul><script type="text/javascript" async
+                         src="../../implementors/tk_http/client/trait.Codec.js">
+                 </script></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "tk_http";
+    </script>
+    <script src="../../main.js"></script>
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Head` struct in crate `tk_http`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Head">
+
+    <title>tk_http::server::Head - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc struct">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'>Struct Head</p><div class="block items"><ul><li><a href="#methods">Methods</a></li><li><a href="#implementations">Trait Implementations</a></li></ul></div><p class='location'><a href='../index.html'>tk_http</a>::<wbr><a href='index.html'>server</a></p><script>window.sidebarCurrent = {name: 'Head', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content">
+<h1 class='fqn'><span class='in-band'>Struct <a href='../index.html'>tk_http</a>::<wbr><a href='index.html'>server</a>::<wbr><a class="struct" href=''>Head</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../../src/tk_http/server/headers.rs.html#44-55' title='goto source code'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct Head&lt;'a&gt; { /* fields omitted */ }</pre><div class='docblock'><p>A borrowed structure that represents request headers</p>
+
+<p>It&#39;s passed to <code>Codec::headers_received</code> and you are free to store or
+discard any needed fields and headers from it.</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl&lt;'a&gt; <a class="struct" href="../../tk_http/server/struct.Head.html" title="struct tk_http::server::Head">Head</a>&lt;'a&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/tk_http/server/headers.rs.html#68-198' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.method' class="method"><span id='method.v' class='invisible'><code>fn <a href='#method.method' class='fnname'>method</a>(&amp;self) -&gt; &amp;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.str.html">str</a></code></span></h4>
+<div class='docblock'><p>Returns a HTTP method</p>
+</div><h4 id='method.request_target' class="method"><span id='request_target.v' class='invisible'><code>fn <a href='#method.request_target' class='fnname'>request_target</a>(&amp;self) -&gt; &amp;<a class="enum" href="../../tk_http/server/enum.RequestTarget.html" title="enum tk_http::server::RequestTarget">RequestTarget</a>&lt;'a&gt;</code></span></h4>
+<div class='docblock'><p>Request-target (the middle part of the first line of request)</p>
+</div><h4 id='method.raw_request_target' class="method"><span id='raw_request_target.v' class='invisible'><code>fn <a href='#method.raw_request_target' class='fnname'>raw_request_target</a>(&amp;self) -&gt; &amp;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.str.html">str</a></code></span></h4>
+<div class='docblock'><p>Returns a raw request target as string</p>
+</div><h4 id='method.path' class="method"><span id='path.v' class='invisible'><code>fn <a href='#method.path' class='fnname'>path</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;&amp;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.str.html">str</a>&gt;</code></span></h4>
+<div class='docblock'><p>Returns path portion of request uri</p>
+
+<p>Note: this may return something not starting from a slash when
+full uri is used as request-target</p>
+
+<p>If the request target is in asterisk form this returns None</p>
+</div><h4 id='method.host' class="method"><span id='host.v' class='invisible'><code>fn <a href='#method.host' class='fnname'>host</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;&amp;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.str.html">str</a>&gt;</code></span></h4>
+<div class='docblock'><p>Return host of a request</p>
+
+<p>Note: this might be extracted from request-target portion of
+request headers (first line).</p>
+
+<p>If both <code>Host</code> header exists and doesn&#39;t match host in request-target
+then this method returns host from request-target and
+<code>has_conflicting_host()</code> method returns true.</p>
+</div><h4 id='method.has_conflicting_host' class="method"><span id='has_conflicting_host.v' class='invisible'><code>fn <a href='#method.has_conflicting_host' class='fnname'>has_conflicting_host</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a></code></span></h4>
+<div class='docblock'><p>Returns true if <code>Host</code> header conflicts with host in request-uri</p>
+
+<p>By spec this fact may be ignored in proxy, but better to reply
+BadRequest in this case</p>
+</div><h4 id='method.version' class="method"><span id='version.v' class='invisible'><code>fn <a href='#method.version' class='fnname'>version</a>(&amp;self) -&gt; <a class="enum" href="../../tk_http/enum.Version.html" title="enum tk_http::Version">Version</a></code></span></h4>
+<div class='docblock'><p>Version of HTTP request</p>
+</div><h4 id='method.headers' class="method"><span id='headers.v' class='invisible'><code>fn <a href='#method.headers' class='fnname'>headers</a>(&amp;self) -&gt; <a class="struct" href="../../tk_http/server/struct.HeaderIter.html" title="struct tk_http::server::HeaderIter">HeaderIter</a></code></span></h4>
+<div class='docblock'><p>Iterator over the headers of HTTP request</p>
+
+<p>This iterator strips the following kinds of headers:</p>
+
+<ol>
+<li>Hop-by-hop headers (<code>Connection</code> itself, and ones it enumerates)</li>
+<li><code>Content-Length</code> and <code>Transfer-Encoding</code></li>
+<li><code>Host</code> header</li>
+<li><code>Upgrade</code> header regardless of whether it&#39;s in <code>Connection</code></li>
+</ol>
+
+<p>You may use <code>all_headers()</code> if you really need to access to all of
+them (mostly useful for debugging puproses). But you may want to
+consider:</p>
+
+<ol>
+<li>Host of the target request can be received using <code>host()</code> method,
+which is also parsed from <code>target</code> path of request if that is
+in absolute form (so conforming to the spec)</li>
+<li>Payload size can be fetched using <code>body_length()</code> method. Note:
+this also includes cases where length is implicitly set to zero.</li>
+<li><code>Connection</code> header might be discovered with <code>connection_close()</code>
+or <code>connection_header()</code></li>
+<li><code>Upgrade</code> might be discovered with <code>get_websocket_upgrade()</code> or
+only looked in <code>all_headers()</code> if <code>upgrade</code> presents in
+<code>connection_header()</code></li>
+</ol>
+</div><h4 id='method.all_headers' class="method"><span id='all_headers.v' class='invisible'><code>fn <a href='#method.all_headers' class='fnname'>all_headers</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">&amp;'a [</a>Header&lt;'a&gt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">]</a></code></span></h4>
+<div class='docblock'><p>All headers of HTTP request</p>
+
+<p>Unlike <code>self.headers()</code> this does include hop-by-hop headers. This
+method is here just for completeness, you shouldn&#39;t need it.</p>
+</div><h4 id='method.connection_close' class="method"><span id='connection_close.v' class='invisible'><code>fn <a href='#method.connection_close' class='fnname'>connection_close</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a></code></span></h4>
+<div class='docblock'><p>Return <code>true</code> if <code>Connection: close</code> header exists</p>
+</div><h4 id='method.connection_header' class="method"><span id='connection_header.v' class='invisible'><code>fn <a href='#method.connection_header' class='fnname'>connection_header</a>(&amp;'a self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;&amp;'a <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.str.html">str</a>&gt;</code></span></h4>
+<div class='docblock'><p>Returns the value of the <code>Connection</code> header (all of them, if multiple)</p>
+</div><h4 id='method.has_body' class="method"><span id='has_body.v' class='invisible'><code>fn <a href='#method.has_body' class='fnname'>has_body</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a></code></span></h4>
+<div class='docblock'><p>Returns true if there was transfer-encoding or content-length != 0</p>
+
+<p>I.e. <code>false</code> may mean either <code>Content-Length: 0</code> or there were no
+content length. This is mostly important to check for requests which
+must not have body (<code>HEAD</code>, <code>CONNECT</code>, <code>Upgrade: websocket</code> ...)</p>
+</div><h4 id='method.body_length' class="method"><span id='body_length.v' class='invisible'><code>fn <a href='#method.body_length' class='fnname'>body_length</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u64.html">u64</a>&gt;</code></span></h4>
+<div class='docblock'><p>Returns size of the request body if either <code>Content-Length</code> is set
+or it is safe to assume that request body is zero-length</p>
+
+<p>If request length can&#39;t be determined in advance (such as when there
+is a <code>Transfer-Encoding</code>) <code>None</code> is returned</p>
+</div><h4 id='method.get_websocket_upgrade' class="method"><span id='get_websocket_upgrade.v' class='invisible'><code>fn <a href='#method.get_websocket_upgrade' class='fnname'>get_websocket_upgrade</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="../../tk_http/server/struct.WebsocketHandshake.html" title="struct tk_http::server::WebsocketHandshake">WebsocketHandshake</a>&gt;, <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>&gt;</code></span></h4>
+<div class='docblock'><p>Check if connection is a websocket and return hanshake info</p>
+
+<p><code>Err(())</code> is returned when there was handshake but where was something
+wrong with it (so you should return <code>BadRequest</code> even if you support
+plain http on the resource).</p>
+
+<p><code>Ok(None)</code> is returned when it&#39;s a plain HTTP request (no upgrade).</p>
+
+<p>Note: this method computes handshake again, so it&#39;s better not to
+call it multiple times.</p>
+</div></div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><span class='in-band'><code>impl&lt;'a&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug">Debug</a> for <a class="struct" href="../../tk_http/server/struct.Head.html" title="struct tk_http::server::Head">Head</a>&lt;'a&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/tk_http/server/headers.rs.html#43' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.fmt' class="method"><span id='fmt.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class="struct" href="https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html" title="struct core::fmt::Formatter">Formatter</a>) -&gt; <a class="type" href="https://doc.rust-lang.org/nightly/core/fmt/type.Result.html" title="type core::fmt::Result">Result</a></code></span></h4>
+<div class='docblock'><p>Formats the value using the given formatter.</p>
+</div></div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "tk_http";
+    </script>
+    <script src="../../main.js"></script>
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

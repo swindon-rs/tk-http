@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Encoder` struct in crate `tk_http`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Encoder">
+
+    <title>tk_http::server::Encoder - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc struct">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'>Struct Encoder</p><div class="block items"><ul><li><a href="#methods">Methods</a></li><li><a href="#implementations">Trait Implementations</a></li></ul></div><p class='location'><a href='../index.html'>tk_http</a>::<wbr><a href='index.html'>server</a></p><script>window.sidebarCurrent = {name: 'Encoder', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content">
+<h1 class='fqn'><span class='in-band'>Struct <a href='../index.html'>tk_http</a>::<wbr><a href='index.html'>server</a>::<wbr><a class="struct" href=''>Encoder</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../../src/tk_http/server/encoder.rs.html#17-20' title='goto source code'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct Encoder&lt;S&gt; { /* fields omitted */ }</pre><div class='docblock'><p>This a response writer that you receive in <code>Codec</code></p>
+
+<p>Methods of this structure ensure that everything you write into a buffer
+is consistent and valid protocol</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl&lt;S&gt; <a class="struct" href="../../tk_http/server/struct.Encoder.html" title="struct tk_http::server::Encoder">Encoder</a>&lt;S&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/tk_http/server/encoder.rs.html#62-274' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.response_continue' class="method"><span id='response_continue.v' class='invisible'><code>fn <a href='#method.response_continue' class='fnname'>response_continue</a>(&amp;mut self)</code></span></h4>
+<div class='docblock'><p>Write a 100 (Continue) response.</p>
+
+<p>A server should respond with the 100 status code if it receives a
+100-continue expectation.</p>
+
+<h1 id='panics' class='section-header'><a href='#panics'>Panics</a></h1>
+<p>When the response is already started. It&#39;s expected that your response
+handler state machine will never call the method twice.</p>
+</div><h4 id='method.status' class="method"><span id='status.v' class='invisible'><code>fn <a href='#method.status' class='fnname'>status</a>(&amp;mut self, status: <a class="enum" href="../../tk_http/enum.Status.html" title="enum tk_http::Status">Status</a>)</code></span></h4>
+<div class='docblock'><p>Write status line using <code>Status</code> enum</p>
+
+<p>This puts status line into a buffer immediately. If you don&#39;t
+continue with request it will be sent to the network shortly.</p>
+
+<h1 id='panics-1' class='section-header'><a href='#panics-1'>Panics</a></h1>
+<p>When status line is already written. It&#39;s expected that your request
+handler state machine will never call the method twice.</p>
+
+<p>When the status code is 100 (Continue). 100 is not allowed
+as a final status code.</p>
+</div><h4 id='method.custom_status' class="method"><span id='custom_status.v' class='invisible'><code>fn <a href='#method.custom_status' class='fnname'>custom_status</a>(&amp;mut self, code: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u16.html">u16</a>, reason: &amp;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.str.html">str</a>)</code></span></h4>
+<div class='docblock'><p>Write custom status line</p>
+
+<h1 id='panics-2' class='section-header'><a href='#panics-2'>Panics</a></h1>
+<p>When status line is already written. It&#39;s expected that your request
+handler state machine will never call the method twice.</p>
+
+<p>When the status code is 100 (Continue). 100 is not allowed
+as a final status code.</p>
+</div><h4 id='method.add_header' class="method"><span id='add_header.v' class='invisible'><code>fn <a href='#method.add_header' class='fnname'>add_header</a>&lt;V:&nbsp;<a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.AsRef.html" title="trait core::convert::AsRef">AsRef</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">[</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u8.html">u8</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">]</a>&gt;&gt;(<br>&nbsp;&nbsp;&nbsp;&nbsp;&amp;mut self, <br>&nbsp;&nbsp;&nbsp;&nbsp;name: &amp;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.str.html">str</a>, <br>&nbsp;&nbsp;&nbsp;&nbsp;value: V<br>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>, HeaderError&gt;</code></span></h4>
+<div class='docblock'><p>Add a header to the message.</p>
+
+<p>Header is written into the output buffer immediately. And is sent
+as soon as the next loop iteration</p>
+
+<p><code>Content-Length</code> header must be send using the <code>add_length</code> method
+and <code>Transfer-Encoding: chunked</code> must be set with the <code>add_chunked</code>
+method. These two headers are important for the security of HTTP.</p>
+
+<p>Note that there is currently no way to use a transfer encoding other
+than chunked.</p>
+
+<p>We return Result here to make implementing proxies easier. In the
+application handler it&#39;s okay to unwrap the result and to get
+a meaningful panic (that is basically an assertion).</p>
+
+<h1 id='panics-3' class='section-header'><a href='#panics-3'>Panics</a></h1>
+<p>Panics when <code>add_header</code> is called in the wrong state.</p>
+</div><h4 id='method.format_header' class="method"><span id='format_header.v' class='invisible'><code>fn <a href='#method.format_header' class='fnname'>format_header</a>&lt;D:&nbsp;<a class="trait" href="https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html" title="trait core::fmt::Display">Display</a>&gt;(<br>&nbsp;&nbsp;&nbsp;&nbsp;&amp;mut self, <br>&nbsp;&nbsp;&nbsp;&nbsp;name: &amp;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.str.html">str</a>, <br>&nbsp;&nbsp;&nbsp;&nbsp;value: D<br>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>, HeaderError&gt;</code></span></h4>
+<div class='docblock'><p>Same as <code>add_header</code> but allows value to be formatted directly into
+the buffer</p>
+
+<p>Useful for dates and numeric headers, as well as some strongly typed
+wrappers</p>
+</div><h4 id='method.add_length' class="method"><span id='add_length.v' class='invisible'><code>fn <a href='#method.add_length' class='fnname'>add_length</a>(&amp;mut self, n: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u64.html">u64</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>, HeaderError&gt;</code></span></h4>
+<div class='docblock'><p>Add a content length to the message.</p>
+
+<p>The <code>Content-Length</code> header is written to the output buffer immediately.
+It is checked that there are no other body length headers present in the
+message. When the body is send the length is validated.</p>
+
+<h1 id='panics-4' class='section-header'><a href='#panics-4'>Panics</a></h1>
+<p>Panics when <code>add_length</code> is called in the wrong state.</p>
+</div><h4 id='method.add_chunked' class="method"><span id='add_chunked.v' class='invisible'><code>fn <a href='#method.add_chunked' class='fnname'>add_chunked</a>(&amp;mut self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>, HeaderError&gt;</code></span></h4>
+<div class='docblock'><p>Sets the transfer encoding to chunked.</p>
+
+<p>Writes <code>Transfer-Encoding: chunked</code> to the output buffer immediately.
+It is assured that there is only one body length header is present
+and the body is written in chunked encoding.</p>
+
+<h1 id='panics-5' class='section-header'><a href='#panics-5'>Panics</a></h1>
+<p>Panics when <code>add_chunked</code> is called in the wrong state.</p>
+</div><h4 id='method.is_started' class="method"><span id='is_started.v' class='invisible'><code>fn <a href='#method.is_started' class='fnname'>is_started</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a></code></span></h4>
+<div class='docblock'><p>Returns true if at least <code>status()</code> method has been called</p>
+
+<p>This is mostly useful to find out whether we can build an error page
+or it&#39;s already too late.</p>
+</div><h4 id='method.done_headers' class="method"><span id='done_headers.v' class='invisible'><code>fn <a href='#method.done_headers' class='fnname'>done_headers</a>(&amp;mut self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a>, HeaderError&gt;</code></span></h4>
+<div class='docblock'><p>Closes the HTTP header and returns <code>true</code> if entity body is expected.</p>
+
+<p>Specifically <code>false</code> is returned when status is 1xx, 204, 304 or in
+the response to a <code>HEAD</code> request but not if the body has zero-length.</p>
+
+<p>Similarly to <code>add_header()</code> it&#39;s fine to <code>unwrap()</code> here, unless you&#39;re
+doing some proxying.</p>
+
+<h1 id='panics-6' class='section-header'><a href='#panics-6'>Panics</a></h1>
+<p>Panics when the response is in a wrong state.</p>
+</div><h4 id='method.write_body' class="method"><span id='write_body.v' class='invisible'><code>fn <a href='#method.write_body' class='fnname'>write_body</a>(&amp;mut self, data: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">&amp;[</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u8.html">u8</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">]</a>)</code></span></h4>
+<div class='docblock'><p>Write a chunk of the message body.</p>
+
+<p>Works both for fixed-size body and chunked body.</p>
+
+<p>For the chunked body each chunk is put into the buffer immediately
+prefixed by chunk size. Empty chunks are ignored.</p>
+
+<p>For both modes chunk is put into the buffer, but is only sent when
+rotor-stream state machine is reached. So you may put multiple chunks
+into the buffer quite efficiently.</p>
+
+<p>You may write a body in responses to HEAD requests just like in real
+requests but the data is not sent to the network. Of course it is
+more efficient to not construct the message body at all.</p>
+
+<h1 id='panics-7' class='section-header'><a href='#panics-7'>Panics</a></h1>
+<p>When response is in wrong state. Or there is no headers which
+determine response body length (either Content-Length or
+Transfer-Encoding).</p>
+</div><h4 id='method.is_complete' class="method"><span id='is_complete.v' class='invisible'><code>fn <a href='#method.is_complete' class='fnname'>is_complete</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a></code></span></h4>
+<div class='docblock'><p>Returns true if <code>done()</code> method is already called and everything
+was okay.</p>
+</div><h4 id='method.done' class="method"><span id='done.v' class='invisible'><code>fn <a href='#method.done' class='fnname'>done</a>(self) -&gt; <a class="struct" href="../../tk_http/server/struct.EncoderDone.html" title="struct tk_http::server::EncoderDone">EncoderDone</a>&lt;S&gt;</code></span></h4>
+<div class='docblock'><p>Writes needed finalization data into the buffer and asserts
+that response is in the appropriate state for that.</p>
+
+<p>The method may be called multiple times.</p>
+
+<h1 id='panics-8' class='section-header'><a href='#panics-8'>Panics</a></h1>
+<p>When the response is in the wrong state.</p>
+</div><h4 id='method.raw_body' class="method"><span id='raw_body.v' class='invisible'><code>fn <a href='#method.raw_body' class='fnname'>raw_body</a>(self) -&gt; <a class="struct" href="../../tk_http/server/struct.FutureRawBody.html" title="struct tk_http::server::FutureRawBody">FutureRawBody</a>&lt;S&gt;</code></span></h4>
+<div class='docblock'><p>Returns a raw body for zero-copy writing techniques</p>
+
+<p>Note: we don&#39;t assert on the format of the body if you&#39;re using this
+interface.</p>
+
+<p>Note 2: RawBody (returned by this future) locks the underlying BiLock,
+which basically means reading from this socket is not possible while
+you&#39;re writing to the raw body.</p>
+
+<p>Good idea is to use interface like this:</p>
+
+<ol>
+<li>Set appropriate content-length</li>
+<li>Write exactly this number of bytes or exit with error</li>
+</ol>
+
+<p>This is specifically designed for using with <code>sendfile</code></p>
+
+<h1 id='panics-9' class='section-header'><a href='#panics-9'>Panics</a></h1>
+<p>This method panics if it&#39;s called when headers are not written yet.</p>
+</div><h4 id='method.flush' class="method"><span id='flush.v' class='invisible'><code>fn <a href='#method.flush' class='fnname'>flush</a>(&amp;mut self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>, <a class="struct" href="https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html" title="struct std::io::error::Error">Error</a>&gt; <span class="where fmt-newline">where<br>&nbsp;&nbsp;&nbsp;&nbsp;S: <a class="trait" href="https://docs.rs/tokio-io/0.1/tokio_io/trait.AsyncWrite.html" title="trait tokio_io::AsyncWrite">AsyncWrite</a>,&nbsp;</span></code></span></h4>
+<div class='docblock'><p>Flush the data to underlying socket</p>
+
+<p>If the whole buffer could not be flushed it schedules a wakeup of
+the current task when the the socket is writable.</p>
+
+<p>You can find out how many bytes are left using <code>bytes_buffered()</code>
+method</p>
+</div><h4 id='method.bytes_buffered' class="method"><span id='bytes_buffered.v' class='invisible'><code>fn <a href='#method.bytes_buffered' class='fnname'>bytes_buffered</a>(&amp;mut self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.usize.html">usize</a></code></span></h4>
+<div class='docblock'><p>Returns bytes currently lying in the buffer</p>
+
+<p>It&#39;s possible that these bytes are left from the previous request if
+pipelining is enabled.</p>
+</div></div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><span class='in-band'><code>impl&lt;S&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/std/io/trait.Write.html" title="trait std::io::Write">Write</a> for <a class="struct" href="../../tk_http/server/struct.Encoder.html" title="struct tk_http::server::Encoder">Encoder</a>&lt;S&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/tk_http/server/encoder.rs.html#284-294' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.write' class="method"><span id='write.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html#tymethod.write' class='fnname'>write</a>(&amp;mut self, buf: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">&amp;[</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u8.html">u8</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">]</a>) -&gt; <a class="type" href="https://doc.rust-lang.org/nightly/std/io/error/type.Result.html" title="type std::io::error::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.usize.html">usize</a>&gt;</code></span></h4>
+<div class='docblock'><p>Write a buffer into this object, returning how many bytes were written. <a href="https://doc.rust-lang.org/nightly/std/io/trait.Write.html#tymethod.write">Read more</a></p>
+</div><h4 id='method.flush-1' class="method"><span id='flush.v-1' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html#tymethod.flush' class='fnname'>flush</a>(&amp;mut self) -&gt; <a class="type" href="https://doc.rust-lang.org/nightly/std/io/error/type.Result.html" title="type std::io::error::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>&gt;</code></span></h4>
+<div class='docblock'><p>Flush this output stream, ensuring that all intermediately buffered contents reach their destination. <a href="https://doc.rust-lang.org/nightly/std/io/trait.Write.html#tymethod.flush">Read more</a></p>
+</div><h4 id='method.write_all' class="method"><span id='write_all.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html#method.write_all' class='fnname'>write_all</a>(&amp;mut self, buf: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">&amp;[</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u8.html">u8</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">]</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>, <a class="struct" href="https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html" title="struct std::io::error::Error">Error</a>&gt;</code><div class='since' title='Stable since Rust version 1.0.0'>1.0.0</div></span></h4>
+<div class='docblock'><p>Attempts to write an entire buffer into this write. <a href="https://doc.rust-lang.org/nightly/std/io/trait.Write.html#method.write_all">Read more</a></p>
+</div><h4 id='method.write_fmt' class="method"><span id='write_fmt.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html#method.write_fmt' class='fnname'>write_fmt</a>(&amp;mut self, fmt: <a class="struct" href="https://doc.rust-lang.org/nightly/core/fmt/struct.Arguments.html" title="struct core::fmt::Arguments">Arguments</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>, <a class="struct" href="https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html" title="struct std::io::error::Error">Error</a>&gt;</code><div class='since' title='Stable since Rust version 1.0.0'>1.0.0</div></span></h4>
+<div class='docblock'><p>Writes a formatted string into this writer, returning any error encountered. <a href="https://doc.rust-lang.org/nightly/std/io/trait.Write.html#method.write_fmt">Read more</a></p>
+</div><h4 id='method.by_ref' class="method"><span id='by_ref.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html#method.by_ref' class='fnname'>by_ref</a>(&amp;mut self) -&gt; &amp;mut Self</code><div class='since' title='Stable since Rust version 1.0.0'>1.0.0</div></span></h4>
+<div class='docblock'><p>Creates a &quot;by reference&quot; adaptor for this instance of <code>Write</code>. <a href="https://doc.rust-lang.org/nightly/std/io/trait.Write.html#method.by_ref">Read more</a></p>
+</div></div><h3 class='impl'><span class='in-band'><code>impl&lt;S:&nbsp;<a class="trait" href="https://docs.rs/tokio-io/0.1/tokio_io/trait.AsyncWrite.html" title="trait tokio_io::AsyncWrite">AsyncWrite</a>&gt; <a class="trait" href="https://docs.rs/tokio-io/0.1/tokio_io/trait.AsyncWrite.html" title="trait tokio_io::AsyncWrite">AsyncWrite</a> for <a class="struct" href="../../tk_http/server/struct.Encoder.html" title="struct tk_http::server::Encoder">Encoder</a>&lt;S&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/tk_http/server/encoder.rs.html#296-300' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.shutdown' class="method"><span id='shutdown.v' class='invisible'><code>fn <a href='https://docs.rs/tokio-io/0.1/tokio_io/trait.AsyncWrite.html#tymethod.shutdown' class='fnname'>shutdown</a>(&amp;mut self) -&gt; <a class="type" href="https://docs.rs/futures/0.1/futures/poll/type.Poll.html" title="type futures::poll::Poll">Poll</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>, <a class="struct" href="https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html" title="struct std::io::error::Error">Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Initiates or attempts to shut down this writer, returning success when the I/O connection has completely shut down. <a href="https://docs.rs/tokio-io/0.1/tokio_io/trait.AsyncWrite.html#tymethod.shutdown">Read more</a></p>
+</div><h4 id='method.write_buf' class="method"><span id='write_buf.v' class='invisible'><code>fn <a href='https://docs.rs/tokio-io/0.1/tokio_io/trait.AsyncWrite.html#method.write_buf' class='fnname'>write_buf</a>&lt;B&gt;(&amp;mut self, buf: &amp;mut B) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="enum" href="https://docs.rs/futures/0.1/futures/poll/enum.Async.html" title="enum futures::poll::Async">Async</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.usize.html">usize</a>&gt;, <a class="struct" href="https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html" title="struct std::io::error::Error">Error</a>&gt; <span class="where fmt-newline">where<br>&nbsp;&nbsp;&nbsp;&nbsp;B: <a class="trait" href="https://docs.rs/bytes/0.4/bytes/buf/buf/trait.Buf.html" title="trait bytes::buf::buf::Buf">Buf</a>,&nbsp;</span></code></span></h4>
+<div class='docblock'><p>Write a <code>Buf</code> into this value, returning how many bytes were written. <a href="https://docs.rs/tokio-io/0.1/tokio_io/trait.AsyncWrite.html#method.write_buf">Read more</a></p>
+</div></div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "tk_http";
+    </script>
+    <script src="../../main.js"></script>
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

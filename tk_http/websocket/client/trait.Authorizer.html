@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Authorizer` trait in crate `tk_http`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Authorizer">
+
+    <title>tk_http::websocket::client::Authorizer - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc trait">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'>Trait Authorizer</p><div class="block items"><ul><li><a href="#associated-types">Associated Types</a></li><li><a href="#required-methods">Required Methods</a></li><li><a href="#implementors">Implementors</a></li></ul></div><p class='location'><a href='../../index.html'>tk_http</a>::<wbr><a href='../index.html'>websocket</a>::<wbr><a href='index.html'>client</a></p><script>window.sidebarCurrent = {name: 'Authorizer', ty: 'trait', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content">
+<h1 class='fqn'><span class='in-band'>Trait <a href='../../index.html'>tk_http</a>::<wbr><a href='../index.html'>websocket</a>::<wbr><a href='index.html'>client</a>::<wbr><a class="trait" href=''>Authorizer</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../../../src/tk_http/websocket/client.rs.html#45-65' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait Authorizer&lt;S&gt; {
+    type <a href='#associatedtype.Result' class="type">Result</a>: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>;
+    fn <a href='#tymethod.write_headers' class='fnname'>write_headers</a>(&amp;mut self, e: <a class="struct" href="../../../tk_http/websocket/client/struct.Encoder.html" title="struct tk_http::websocket::client::Encoder">Encoder</a>&lt;S&gt;) -&gt; <a class="struct" href="../../../tk_http/websocket/client/struct.EncoderDone.html" title="struct tk_http::websocket::client::EncoderDone">EncoderDone</a>&lt;S&gt;;
+    fn <a href='#tymethod.headers_received' class='fnname'>headers_received</a>(<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&amp;mut self, <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;headers: &amp;<a class="struct" href="../../../tk_http/websocket/client/struct.Head.html" title="struct tk_http::websocket::client::Head">Head</a><br>&nbsp;&nbsp;&nbsp;&nbsp;) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;Self::<a class="trait" href="../../../tk_http/websocket/client/trait.Authorizer.html" title="trait tk_http::websocket::client::Authorizer">Result</a>, <a class="struct" href="../../../tk_http/websocket/struct.Error.html" title="struct tk_http::websocket::Error">Error</a>&gt;;
+}</pre><div class='docblock'><p>Authorizer sends all the necessary headers and checks response headers
+to establish websocket connection</p>
+
+<p>The <code>SimpleAuthorizer</code> implementation is good enough for most cases, but
+custom authorizer may be helpful for <code>Cookie</code> or <code>Authorization</code> header.</p>
+</div>
+            <h2 id='associated-types'>Associated Types</h2>
+            <div class='methods'>
+        <h3 id='associatedtype.Result' class='method'><span id='Result.t' class='invisible'><code>type <a href='#associatedtype.Result' class="type">Result</a>: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a></code></span></h3><div class='docblock'><p>The type that may be returned from a <code>header_received</code>. It should
+encompass everything parsed from input headers.</p>
+</div></div>
+            <h2 id='required-methods'>Required Methods</h2>
+            <div class='methods'>
+        <h3 id='tymethod.write_headers' class='method'><span id='write_headers.v' class='invisible'><code>fn <a href='#tymethod.write_headers' class='fnname'>write_headers</a>(&amp;mut self, e: <a class="struct" href="../../../tk_http/websocket/client/struct.Encoder.html" title="struct tk_http::websocket::client::Encoder">Encoder</a>&lt;S&gt;) -&gt; <a class="struct" href="../../../tk_http/websocket/client/struct.EncoderDone.html" title="struct tk_http::websocket::client::EncoderDone">EncoderDone</a>&lt;S&gt;</code></span></h3><div class='docblock'><p>Write request headers</p>
+
+<p>Websocket-specific headers like <code>Connection</code>, <code>Upgrade</code>, and
+<code>Sec-Websocket-Key</code> are written automatically. But other important
+things like <code>Host</code>, <code>Origin</code>, <code>User-Agent</code> must be written by
+this method, as well as path encoded in request-line.</p>
+</div><h3 id='tymethod.headers_received' class='method'><span id='headers_received.v' class='invisible'><code>fn <a href='#tymethod.headers_received' class='fnname'>headers_received</a>(&amp;mut self, headers: &amp;<a class="struct" href="../../../tk_http/websocket/client/struct.Head.html" title="struct tk_http::websocket::client::Head">Head</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;Self::<a class="trait" href="../../../tk_http/websocket/client/trait.Authorizer.html" title="trait tk_http::websocket::client::Authorizer">Result</a>, <a class="struct" href="../../../tk_http/websocket/struct.Error.html" title="struct tk_http::websocket::Error">Error</a>&gt;</code></span></h3><div class='docblock'><p>A handler of response headers</p>
+
+<p>It&#39;s called when websocket has been sucessfully connected or when
+server returned error, check that response code equals 101 to make
+sure response is established.</p>
+
+<p>Anyway, handler may be skipped in case of invalid response headers.</p>
+</div></div>
+        <h2 id='implementors'>Implementors</h2>
+        <ul class='item-list' id='implementors-list'>
+    <li><code>impl&lt;S&gt; Authorizer&lt;S&gt; for <a class="struct" href="../../../tk_http/websocket/client/struct.SimpleAuthorizer.html" title="struct tk_http::websocket::client::SimpleAuthorizer">SimpleAuthorizer</a></code></li>
+</ul><script type="text/javascript" async
+                         src="../../../implementors/tk_http/websocket/client/trait.Authorizer.js">
+                 </script></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../../";
+        window.currentCrate = "tk_http";
+    </script>
+    <script src="../../../main.js"></script>
+    <script defer src="../../../search-index.js"></script>
+</body>
+</html>

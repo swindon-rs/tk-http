@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="Source to the Rust file `src/websocket/config.rs`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang">
+
+    <title>config.rs.html -- source</title>
+
+    <link rel="stylesheet" type="text/css" href="../../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc source">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content"><pre class="line-numbers"><span id="1"> 1</span>
+<span id="2"> 2</span>
+<span id="3"> 3</span>
+<span id="4"> 4</span>
+<span id="5"> 5</span>
+<span id="6"> 6</span>
+<span id="7"> 7</span>
+<span id="8"> 8</span>
+<span id="9"> 9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+</pre><pre class="rust ">
+<span class="kw">use</span> <span class="ident">std</span>::<span class="ident">time</span>::<span class="ident">Duration</span>;
+<span class="kw">use</span> <span class="ident">std</span>::<span class="ident">sync</span>::<span class="ident">Arc</span>;
+
+<span class="kw">use</span> <span class="ident">websocket</span>::{<span class="ident">Config</span>};
+
+<span class="kw">impl</span> <span class="ident">Config</span> {
+    <span class="doccomment">/// Create a config with defaults</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>() <span class="op">-&gt;</span> <span class="ident">Config</span> {
+        <span class="ident">Config</span> {
+            <span class="ident">ping_interval</span>: <span class="ident">Duration</span>::<span class="ident">new</span>(<span class="number">10</span>, <span class="number">0</span>),
+            <span class="ident">inactivity_timeout</span>: <span class="ident">Duration</span>::<span class="ident">new</span>(<span class="number">30</span>, <span class="number">0</span>),
+            <span class="ident">max_packet_size</span>: <span class="number">10</span> <span class="op">&lt;&lt;</span> <span class="number">20</span>,
+        }
+    }
+    <span class="doccomment">/// Set ping interval</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Default is 10 seconds.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// If no messages have been received within this interval, we send</span>
+    <span class="doccomment">/// a ping message. Only full messages are accounted. If some large</span>
+    <span class="doccomment">/// frame is being received for this long, we still send ping.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Note: you can&#39;t remove the interval, but you can set it to</span>
+    <span class="doccomment">/// a sufficiently large value.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Note 2: you may also need to tune inactivity timeout if you change</span>
+    <span class="doccomment">/// this value.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">ping_interval</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">dur</span>: <span class="ident">Duration</span>) <span class="op">-&gt;</span> <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">ping_interval</span> <span class="op">=</span> <span class="ident">dur</span>;
+        <span class="self">self</span>
+    }
+
+    <span class="doccomment">/// Set inactivity timeout</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Default is 25 seconds.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// A connection is shut down if no messages were received during this</span>
+    <span class="doccomment">/// interval.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Note: only full frames are accounted. If some very large frame is</span>
+    <span class="doccomment">/// being sent too long, we drop the connection. So be sure to set this</span>
+    <span class="doccomment">/// value large enough so that slowest client can send largest frame and</span>
+    <span class="doccomment">/// another ping.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// There are two use cases for this interval:</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// 1. Make it 2.5x the ping_interval to detect connections which</span>
+    <span class="doccomment">///    don&#39;t have destination host alive</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// 2. Inactivity interval that is smaller than `ping_interval` will</span>
+    <span class="doccomment">///    detect connections which are alive but do not send any messages.</span>
+    <span class="doccomment">///    This is similar to how HTTP servers shutdown inactive connections.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Note: you may also need to tune ping interval if you change</span>
+    <span class="doccomment">/// this value.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">inactivity_timeout</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">dur</span>: <span class="ident">Duration</span>) <span class="op">-&gt;</span> <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">inactivity_timeout</span> <span class="op">=</span> <span class="ident">dur</span>;
+        <span class="self">self</span>
+    }
+
+    <span class="doccomment">/// Maximum packet size</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// If some frame declares size larger than this, we immediately abort</span>
+    <span class="doccomment">/// the connection</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">max_packet_size</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">size</span>: <span class="ident">usize</span>) <span class="op">-&gt;</span> <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">max_packet_size</span> <span class="op">=</span> <span class="ident">size</span>;
+        <span class="self">self</span>
+    }
+
+    <span class="doccomment">/// Create a Arc&#39;d config clone to pass to the constructor</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// This is just a convenience method.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">done</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">Config</span><span class="op">&gt;</span> {
+        <span class="ident">Arc</span>::<span class="ident">new</span>(<span class="self">self</span>.<span class="ident">clone</span>())
+    }
+}
+</pre>
+</section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../../";
+        window.currentCrate = "tk_http";
+    </script>
+    <script src="../../../main.js"></script>
+    <script defer src="../../../search-index.js"></script>
+</body>
+</html>

@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="Source to the Rust file `src/server/encoder.rs`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang">
+
+    <title>encoder.rs.html -- source</title>
+
+    <link rel="stylesheet" type="text/css" href="../../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc source">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content"><pre class="line-numbers"><span id="1">  1</span>
+<span id="2">  2</span>
+<span id="3">  3</span>
+<span id="4">  4</span>
+<span id="5">  5</span>
+<span id="6">  6</span>
+<span id="7">  7</span>
+<span id="8">  8</span>
+<span id="9">  9</span>
+<span id="10"> 10</span>
+<span id="11"> 11</span>
+<span id="12"> 12</span>
+<span id="13"> 13</span>
+<span id="14"> 14</span>
+<span id="15"> 15</span>
+<span id="16"> 16</span>
+<span id="17"> 17</span>
+<span id="18"> 18</span>
+<span id="19"> 19</span>
+<span id="20"> 20</span>
+<span id="21"> 21</span>
+<span id="22"> 22</span>
+<span id="23"> 23</span>
+<span id="24"> 24</span>
+<span id="25"> 25</span>
+<span id="26"> 26</span>
+<span id="27"> 27</span>
+<span id="28"> 28</span>
+<span id="29"> 29</span>
+<span id="30"> 30</span>
+<span id="31"> 31</span>
+<span id="32"> 32</span>
+<span id="33"> 33</span>
+<span id="34"> 34</span>
+<span id="35"> 35</span>
+<span id="36"> 36</span>
+<span id="37"> 37</span>
+<span id="38"> 38</span>
+<span id="39"> 39</span>
+<span id="40"> 40</span>
+<span id="41"> 41</span>
+<span id="42"> 42</span>
+<span id="43"> 43</span>
+<span id="44"> 44</span>
+<span id="45"> 45</span>
+<span id="46"> 46</span>
+<span id="47"> 47</span>
+<span id="48"> 48</span>
+<span id="49"> 49</span>
+<span id="50"> 50</span>
+<span id="51"> 51</span>
+<span id="52"> 52</span>
+<span id="53"> 53</span>
+<span id="54"> 54</span>
+<span id="55"> 55</span>
+<span id="56"> 56</span>
+<span id="57"> 57</span>
+<span id="58"> 58</span>
+<span id="59"> 59</span>
+<span id="60"> 60</span>
+<span id="61"> 61</span>
+<span id="62"> 62</span>
+<span id="63"> 63</span>
+<span id="64"> 64</span>
+<span id="65"> 65</span>
+<span id="66"> 66</span>
+<span id="67"> 67</span>
+<span id="68"> 68</span>
+<span id="69"> 69</span>
+<span id="70"> 70</span>
+<span id="71"> 71</span>
+<span id="72"> 72</span>
+<span id="73"> 73</span>
+<span id="74"> 74</span>
+<span id="75"> 75</span>
+<span id="76"> 76</span>
+<span id="77"> 77</span>
+<span id="78"> 78</span>
+<span id="79"> 79</span>
+<span id="80"> 80</span>
+<span id="81"> 81</span>
+<span id="82"> 82</span>
+<span id="83"> 83</span>
+<span id="84"> 84</span>
+<span id="85"> 85</span>
+<span id="86"> 86</span>
+<span id="87"> 87</span>
+<span id="88"> 88</span>
+<span id="89"> 89</span>
+<span id="90"> 90</span>
+<span id="91"> 91</span>
+<span id="92"> 92</span>
+<span id="93"> 93</span>
+<span id="94"> 94</span>
+<span id="95"> 95</span>
+<span id="96"> 96</span>
+<span id="97"> 97</span>
+<span id="98"> 98</span>
+<span id="99"> 99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+<span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
+<span id="202">202</span>
+<span id="203">203</span>
+<span id="204">204</span>
+<span id="205">205</span>
+<span id="206">206</span>
+<span id="207">207</span>
+<span id="208">208</span>
+<span id="209">209</span>
+<span id="210">210</span>
+<span id="211">211</span>
+<span id="212">212</span>
+<span id="213">213</span>
+<span id="214">214</span>
+<span id="215">215</span>
+<span id="216">216</span>
+<span id="217">217</span>
+<span id="218">218</span>
+<span id="219">219</span>
+<span id="220">220</span>
+<span id="221">221</span>
+<span id="222">222</span>
+<span id="223">223</span>
+<span id="224">224</span>
+<span id="225">225</span>
+<span id="226">226</span>
+<span id="227">227</span>
+<span id="228">228</span>
+<span id="229">229</span>
+<span id="230">230</span>
+<span id="231">231</span>
+<span id="232">232</span>
+<span id="233">233</span>
+<span id="234">234</span>
+<span id="235">235</span>
+<span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
+<span id="251">251</span>
+<span id="252">252</span>
+<span id="253">253</span>
+<span id="254">254</span>
+<span id="255">255</span>
+<span id="256">256</span>
+<span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+<span id="266">266</span>
+<span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
+<span id="287">287</span>
+<span id="288">288</span>
+<span id="289">289</span>
+<span id="290">290</span>
+<span id="291">291</span>
+<span id="292">292</span>
+<span id="293">293</span>
+<span id="294">294</span>
+<span id="295">295</span>
+<span id="296">296</span>
+<span id="297">297</span>
+<span id="298">298</span>
+<span id="299">299</span>
+<span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
+<span id="306">306</span>
+<span id="307">307</span>
+<span id="308">308</span>
+<span id="309">309</span>
+<span id="310">310</span>
+<span id="311">311</span>
+<span id="312">312</span>
+<span id="313">313</span>
+<span id="314">314</span>
+<span id="315">315</span>
+<span id="316">316</span>
+<span id="317">317</span>
+<span id="318">318</span>
+<span id="319">319</span>
+<span id="320">320</span>
+<span id="321">321</span>
+<span id="322">322</span>
+<span id="323">323</span>
+<span id="324">324</span>
+<span id="325">325</span>
+<span id="326">326</span>
+<span id="327">327</span>
+<span id="328">328</span>
+<span id="329">329</span>
+<span id="330">330</span>
+<span id="331">331</span>
+<span id="332">332</span>
+<span id="333">333</span>
+<span id="334">334</span>
+<span id="335">335</span>
+<span id="336">336</span>
+<span id="337">337</span>
+<span id="338">338</span>
+<span id="339">339</span>
+<span id="340">340</span>
+<span id="341">341</span>
+<span id="342">342</span>
+<span id="343">343</span>
+<span id="344">344</span>
+<span id="345">345</span>
+<span id="346">346</span>
+<span id="347">347</span>
+<span id="348">348</span>
+<span id="349">349</span>
+<span id="350">350</span>
+<span id="351">351</span>
+<span id="352">352</span>
+<span id="353">353</span>
+<span id="354">354</span>
+<span id="355">355</span>
+<span id="356">356</span>
+<span id="357">357</span>
+<span id="358">358</span>
+<span id="359">359</span>
+<span id="360">360</span>
+<span id="361">361</span>
+<span id="362">362</span>
+<span id="363">363</span>
+<span id="364">364</span>
+<span id="365">365</span>
+<span id="366">366</span>
+<span id="367">367</span>
+<span id="368">368</span>
+<span id="369">369</span>
+<span id="370">370</span>
+<span id="371">371</span>
+<span id="372">372</span>
+<span id="373">373</span>
+<span id="374">374</span>
+</pre><pre class="rust ">
+<span class="kw">use</span> <span class="ident">std</span>::<span class="ident">io</span>;
+<span class="kw">use</span> <span class="ident">std</span>::<span class="ident">fmt</span>::<span class="ident">Display</span>;
+
+<span class="kw">use</span> <span class="ident">futures</span>::{<span class="ident">Future</span>, <span class="ident">Poll</span>};
+<span class="kw">use</span> <span class="ident">tk_bufstream</span>::{<span class="ident">WriteBuf</span>, <span class="ident">WriteRaw</span>, <span class="ident">FutureWriteRaw</span>};
+<span class="kw">use</span> <span class="ident">tokio_io</span>::<span class="ident">AsyncWrite</span>;
+
+<span class="kw">use</span> <span class="ident">base_serializer</span>::{<span class="ident">MessageState</span>, <span class="ident">HeaderError</span>};
+<span class="kw">use</span> <span class="ident">enums</span>::{<span class="ident">Version</span>, <span class="ident">Status</span>};
+<span class="kw">use</span> <span class="kw">super</span>::<span class="ident">headers</span>::<span class="ident">Head</span>;
+
+
+<span class="doccomment">/// This a response writer that you receive in `Codec`</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// Methods of this structure ensure that everything you write into a buffer</span>
+<span class="doccomment">/// is consistent and valid protocol</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Encoder</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="ident">state</span>: <span class="ident">MessageState</span>,
+    <span class="ident">io</span>: <span class="ident">WriteBuf</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
+}
+
+<span class="doccomment">/// This structure returned from `Encoder::done` and works as a continuation</span>
+<span class="doccomment">/// that should be returned from the future that writes request.</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">EncoderDone</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="ident">buf</span>: <span class="ident">WriteBuf</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
+}
+
+<span class="doccomment">/// This structure contains all needed info to start response of the request</span>
+<span class="doccomment">/// in a correct manner</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// This is ought to be used in serializer only</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>)]</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">ResponseConfig</span> {
+    <span class="doccomment">/// Whether request is a HEAD request</span>
+    <span class="kw">pub</span> <span class="ident">is_head</span>: <span class="ident">bool</span>,
+    <span class="doccomment">/// Is `Connection: close` in request or HTTP version == 1.0</span>
+    <span class="kw">pub</span> <span class="ident">do_close</span>: <span class="ident">bool</span>,
+    <span class="doccomment">/// Version of HTTP request</span>
+    <span class="kw">pub</span> <span class="ident">version</span>: <span class="ident">Version</span>,
+}
+
+<span class="doccomment">/// A future that yields `RawBody` after buffer is empty</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// This future is created by `Encoder::raw_body()``</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">FutureRawBody</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">FutureWriteRaw</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>);
+
+<span class="doccomment">/// The actual raw body</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// The object is used to write some data directly to the socket without any</span>
+<span class="doccomment">/// buffering/copying. Note that chunked encoding must be handled manually</span>
+<span class="doccomment">/// in this case.</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// This is a tiny wrapper around `WriteRaw` which is basically tiny wrapper</span>
+<span class="doccomment">/// around TcpStream or whatever `S` represents. Wrappers are used to</span>
+<span class="doccomment">/// reconstruct original object, `EncoderDone` in this case.</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">RawBody</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="ident">io</span>: <span class="ident">WriteRaw</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
+}
+
+
+<span class="comment">// TODO: Support responses to CONNECT and `Upgrade: websocket` requests.</span>
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="ident">Encoder</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="doccomment">/// Write a 100 (Continue) response.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// A server should respond with the 100 status code if it receives a</span>
+    <span class="doccomment">/// 100-continue expectation.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// # Panics</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// When the response is already started. It&#39;s expected that your response</span>
+    <span class="doccomment">/// handler state machine will never call the method twice.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">response_continue</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) {
+        <span class="self">self</span>.<span class="ident">state</span>.<span class="ident">response_continue</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">out_buf</span>)
+    }
+
+    <span class="doccomment">/// Write status line using `Status` enum</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// This puts status line into a buffer immediately. If you don&#39;t</span>
+    <span class="doccomment">/// continue with request it will be sent to the network shortly.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// # Panics</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// When status line is already written. It&#39;s expected that your request</span>
+    <span class="doccomment">/// handler state machine will never call the method twice.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// When the status code is 100 (Continue). 100 is not allowed</span>
+    <span class="doccomment">/// as a final status code.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">status</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">status</span>: <span class="ident">Status</span>) {
+        <span class="self">self</span>.<span class="ident">state</span>.<span class="ident">response_status</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">out_buf</span>,
+            <span class="ident">status</span>.<span class="ident">code</span>(), <span class="ident">status</span>.<span class="ident">reason</span>())
+    }
+
+    <span class="doccomment">/// Write custom status line</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// # Panics</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// When status line is already written. It&#39;s expected that your request</span>
+    <span class="doccomment">/// handler state machine will never call the method twice.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// When the status code is 100 (Continue). 100 is not allowed</span>
+    <span class="doccomment">/// as a final status code.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">custom_status</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">code</span>: <span class="ident">u16</span>, <span class="ident">reason</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>) {
+        <span class="self">self</span>.<span class="ident">state</span>.<span class="ident">response_status</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">out_buf</span>, <span class="ident">code</span>, <span class="ident">reason</span>)
+    }
+
+    <span class="doccomment">/// Add a header to the message.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Header is written into the output buffer immediately. And is sent</span>
+    <span class="doccomment">/// as soon as the next loop iteration</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// `Content-Length` header must be send using the `add_length` method</span>
+    <span class="doccomment">/// and `Transfer-Encoding: chunked` must be set with the `add_chunked`</span>
+    <span class="doccomment">/// method. These two headers are important for the security of HTTP.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Note that there is currently no way to use a transfer encoding other</span>
+    <span class="doccomment">/// than chunked.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// We return Result here to make implementing proxies easier. In the</span>
+    <span class="doccomment">/// application handler it&#39;s okay to unwrap the result and to get</span>
+    <span class="doccomment">/// a meaningful panic (that is basically an assertion).</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// # Panics</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Panics when `add_header` is called in the wrong state.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">add_header</span><span class="op">&lt;</span><span class="ident">V</span>: <span class="ident">AsRef</span><span class="op">&lt;</span>[<span class="ident">u8</span>]<span class="op">&gt;&gt;</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">name</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>, <span class="ident">value</span>: <span class="ident">V</span>)
+        <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>(), <span class="ident">HeaderError</span><span class="op">&gt;</span>
+    {
+        <span class="self">self</span>.<span class="ident">state</span>.<span class="ident">add_header</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">out_buf</span>, <span class="ident">name</span>, <span class="ident">value</span>.<span class="ident">as_ref</span>())
+    }
+
+    <span class="doccomment">/// Same as `add_header` but allows value to be formatted directly into</span>
+    <span class="doccomment">/// the buffer</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Useful for dates and numeric headers, as well as some strongly typed</span>
+    <span class="doccomment">/// wrappers</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">format_header</span><span class="op">&lt;</span><span class="ident">D</span>: <span class="ident">Display</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">name</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>, <span class="ident">value</span>: <span class="ident">D</span>)
+        <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>(), <span class="ident">HeaderError</span><span class="op">&gt;</span>
+    {
+        <span class="self">self</span>.<span class="ident">state</span>.<span class="ident">format_header</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">out_buf</span>, <span class="ident">name</span>, <span class="ident">value</span>)
+    }
+
+    <span class="doccomment">/// Add a content length to the message.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// The `Content-Length` header is written to the output buffer immediately.</span>
+    <span class="doccomment">/// It is checked that there are no other body length headers present in the</span>
+    <span class="doccomment">/// message. When the body is send the length is validated.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// # Panics</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Panics when `add_length` is called in the wrong state.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">add_length</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">n</span>: <span class="ident">u64</span>)
+        <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>(), <span class="ident">HeaderError</span><span class="op">&gt;</span>
+    {
+        <span class="self">self</span>.<span class="ident">state</span>.<span class="ident">add_length</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">out_buf</span>, <span class="ident">n</span>)
+    }
+    <span class="doccomment">/// Sets the transfer encoding to chunked.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Writes `Transfer-Encoding: chunked` to the output buffer immediately.</span>
+    <span class="doccomment">/// It is assured that there is only one body length header is present</span>
+    <span class="doccomment">/// and the body is written in chunked encoding.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// # Panics</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Panics when `add_chunked` is called in the wrong state.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">add_chunked</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>)
+        <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>(), <span class="ident">HeaderError</span><span class="op">&gt;</span>
+    {
+        <span class="self">self</span>.<span class="ident">state</span>.<span class="ident">add_chunked</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">out_buf</span>)
+    }
+    <span class="doccomment">/// Returns true if at least `status()` method has been called</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// This is mostly useful to find out whether we can build an error page</span>
+    <span class="doccomment">/// or it&#39;s already too late.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">is_started</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
+        <span class="self">self</span>.<span class="ident">state</span>.<span class="ident">is_started</span>()
+    }
+    <span class="doccomment">/// Closes the HTTP header and returns `true` if entity body is expected.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Specifically `false` is returned when status is 1xx, 204, 304 or in</span>
+    <span class="doccomment">/// the response to a `HEAD` request but not if the body has zero-length.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Similarly to `add_header()` it&#39;s fine to `unwrap()` here, unless you&#39;re</span>
+    <span class="doccomment">/// doing some proxying.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// # Panics</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Panics when the response is in a wrong state.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">done_headers</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">bool</span>, <span class="ident">HeaderError</span><span class="op">&gt;</span> {
+        <span class="self">self</span>.<span class="ident">state</span>.<span class="ident">done_headers</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">out_buf</span>)
+    }
+    <span class="doccomment">/// Write a chunk of the message body.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Works both for fixed-size body and chunked body.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// For the chunked body each chunk is put into the buffer immediately</span>
+    <span class="doccomment">/// prefixed by chunk size. Empty chunks are ignored.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// For both modes chunk is put into the buffer, but is only sent when</span>
+    <span class="doccomment">/// rotor-stream state machine is reached. So you may put multiple chunks</span>
+    <span class="doccomment">/// into the buffer quite efficiently.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// You may write a body in responses to HEAD requests just like in real</span>
+    <span class="doccomment">/// requests but the data is not sent to the network. Of course it is</span>
+    <span class="doccomment">/// more efficient to not construct the message body at all.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// # Panics</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// When response is in wrong state. Or there is no headers which</span>
+    <span class="doccomment">/// determine response body length (either Content-Length or</span>
+    <span class="doccomment">/// Transfer-Encoding).</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">write_body</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">data</span>: <span class="kw-2">&amp;</span>[<span class="ident">u8</span>]) {
+        <span class="self">self</span>.<span class="ident">state</span>.<span class="ident">write_body</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">out_buf</span>, <span class="ident">data</span>)
+    }
+    <span class="doccomment">/// Returns true if `done()` method is already called and everything</span>
+    <span class="doccomment">/// was okay.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">is_complete</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
+        <span class="self">self</span>.<span class="ident">state</span>.<span class="ident">is_complete</span>()
+    }
+    <span class="doccomment">/// Writes needed finalization data into the buffer and asserts</span>
+    <span class="doccomment">/// that response is in the appropriate state for that.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// The method may be called multiple times.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// # Panics</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// When the response is in the wrong state.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">done</span>(<span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">EncoderDone</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+        <span class="self">self</span>.<span class="ident">state</span>.<span class="ident">done</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">out_buf</span>);
+        <span class="ident">EncoderDone</span> { <span class="ident">buf</span>: <span class="self">self</span>.<span class="ident">io</span> }
+    }
+    <span class="doccomment">/// Returns a raw body for zero-copy writing techniques</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Note: we don&#39;t assert on the format of the body if you&#39;re using this</span>
+    <span class="doccomment">/// interface.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Note 2: RawBody (returned by this future) locks the underlying BiLock,</span>
+    <span class="doccomment">/// which basically means reading from this socket is not possible while</span>
+    <span class="doccomment">/// you&#39;re writing to the raw body.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Good idea is to use interface like this:</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// 1. Set appropriate content-length</span>
+    <span class="doccomment">/// 2. Write exactly this number of bytes or exit with error</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// This is specifically designed for using with `sendfile`</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// # Panics</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// This method panics if it&#39;s called when headers are not written yet.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">raw_body</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">FutureRawBody</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+        <span class="macro">assert</span><span class="macro">!</span>(<span class="self">self</span>.<span class="ident">state</span>.<span class="ident">is_after_headers</span>());
+        <span class="ident">FutureRawBody</span>(<span class="self">self</span>.<span class="ident">io</span>.<span class="ident">borrow_raw</span>())
+    }
+
+    <span class="doccomment">/// Flush the data to underlying socket</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// If the whole buffer could not be flushed it schedules a wakeup of</span>
+    <span class="doccomment">/// the current task when the the socket is writable.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// You can find out how many bytes are left using `bytes_buffered()`</span>
+    <span class="doccomment">/// method</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">flush</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>(), <span class="ident">io</span>::<span class="ident">Error</span><span class="op">&gt;</span>
+        <span class="kw">where</span> <span class="ident">S</span>: <span class="ident">AsyncWrite</span>
+    {
+        <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">flush</span>()
+    }
+    <span class="doccomment">/// Returns bytes currently lying in the buffer</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// It&#39;s possible that these bytes are left from the previous request if</span>
+    <span class="doccomment">/// pipelining is enabled.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">bytes_buffered</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">usize</span> {
+        <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">out_buf</span>.<span class="ident">len</span>()
+    }
+}
+
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="ident">RawBody</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="doccomment">/// Returns `EncoderDone` object that might be passed back to the HTTP</span>
+    <span class="doccomment">/// protocol</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">done</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">EncoderDone</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+        <span class="ident">EncoderDone</span> { <span class="ident">buf</span>: <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">into_buf</span>() }
+    }
+}
+
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="ident">io</span>::<span class="ident">Write</span> <span class="kw">for</span> <span class="ident">Encoder</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">write</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">buf</span>: <span class="kw-2">&amp;</span>[<span class="ident">u8</span>]) <span class="op">-&gt;</span> <span class="ident">io</span>::<span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">usize</span><span class="op">&gt;</span> {
+        <span class="comment">// TODO(tailhook) we might want to propatage error correctly</span>
+        <span class="comment">// rather than panic</span>
+        <span class="self">self</span>.<span class="ident">write_body</span>(<span class="ident">buf</span>);
+        <span class="prelude-val">Ok</span>((<span class="ident">buf</span>.<span class="ident">len</span>()))
+    }
+    <span class="kw">fn</span> <span class="ident">flush</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">io</span>::<span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="prelude-val">Ok</span>(())
+    }
+}
+
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">AsyncWrite</span><span class="op">&gt;</span> <span class="ident">AsyncWrite</span> <span class="kw">for</span> <span class="ident">Encoder</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">shutdown</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Poll</span><span class="op">&lt;</span>(), <span class="ident">io</span>::<span class="ident">Error</span><span class="op">&gt;</span> {
+        <span class="macro">panic</span><span class="macro">!</span>(<span class="string">&quot;Can&#39;t shutdown request encoder&quot;</span>);
+    }
+}
+
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">AsyncWrite</span><span class="op">&gt;</span> <span class="ident">io</span>::<span class="ident">Write</span> <span class="kw">for</span> <span class="ident">RawBody</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">write</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">buf</span>: <span class="kw-2">&amp;</span>[<span class="ident">u8</span>]) <span class="op">-&gt;</span> <span class="ident">io</span>::<span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">usize</span><span class="op">&gt;</span> {
+        <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">get_mut</span>().<span class="ident">write</span>(<span class="ident">buf</span>)
+    }
+    <span class="kw">fn</span> <span class="ident">flush</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">io</span>::<span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">get_mut</span>().<span class="ident">flush</span>()
+    }
+}
+
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">AsyncWrite</span><span class="op">&gt;</span> <span class="ident">AsyncWrite</span> <span class="kw">for</span> <span class="ident">RawBody</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">shutdown</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Poll</span><span class="op">&lt;</span>(), <span class="ident">io</span>::<span class="ident">Error</span><span class="op">&gt;</span> {
+        <span class="macro">panic</span><span class="macro">!</span>(<span class="string">&quot;Can&#39;t shutdown request body&quot;</span>);
+    }
+}
+
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">get_inner</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">e</span>: <span class="ident">EncoderDone</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="ident">WriteBuf</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="ident">e</span>.<span class="ident">buf</span>
+}
+
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">io</span>: <span class="ident">WriteBuf</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">cfg</span>: <span class="ident">ResponseConfig</span>) <span class="op">-&gt;</span> <span class="ident">Encoder</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="kw">use</span> <span class="ident">base_serializer</span>::<span class="ident">Body</span>::<span class="kw-2">*</span>;
+
+    <span class="comment">// TODO(tailhook) implement Connection: Close,</span>
+    <span class="comment">// (including explicit one in HTTP/1.0) and maybe others</span>
+    <span class="ident">Encoder</span> {
+        <span class="ident">state</span>: <span class="ident">MessageState</span>::<span class="ident">ResponseStart</span> {
+            <span class="ident">body</span>: <span class="kw">if</span> <span class="ident">cfg</span>.<span class="ident">is_head</span> { <span class="ident">Head</span> } <span class="kw">else</span> { <span class="ident">Normal</span> },
+            <span class="ident">version</span>: <span class="ident">cfg</span>.<span class="ident">version</span>,
+            <span class="ident">close</span>: <span class="ident">cfg</span>.<span class="ident">do_close</span> <span class="op">||</span> <span class="ident">cfg</span>.<span class="ident">version</span> <span class="op">==</span> <span class="ident">Version</span>::<span class="ident">Http10</span>,
+        },
+        <span class="ident">io</span>: <span class="ident">io</span>,
+    }
+}
+
+<span class="kw">impl</span> <span class="ident">ResponseConfig</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">from</span>(<span class="ident">req</span>: <span class="kw-2">&amp;</span><span class="ident">Head</span>) <span class="op">-&gt;</span> <span class="ident">ResponseConfig</span> {
+        <span class="ident">ResponseConfig</span> {
+            <span class="ident">version</span>: <span class="ident">req</span>.<span class="ident">version</span>(),
+            <span class="ident">is_head</span>: <span class="ident">req</span>.<span class="ident">method</span>() <span class="op">==</span> <span class="string">&quot;HEAD&quot;</span>,
+            <span class="ident">do_close</span>: <span class="ident">req</span>.<span class="ident">connection_close</span>(),
+        }
+    }
+}
+
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">AsyncWrite</span><span class="op">&gt;</span> <span class="ident">Future</span> <span class="kw">for</span> <span class="ident">FutureRawBody</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="kw">type</span> <span class="ident">Item</span> <span class="op">=</span> <span class="ident">RawBody</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>;
+    <span class="kw">type</span> <span class="ident">Error</span> <span class="op">=</span> <span class="ident">io</span>::<span class="ident">Error</span>;
+    <span class="kw">fn</span> <span class="ident">poll</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Poll</span><span class="op">&lt;</span><span class="ident">RawBody</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">io</span>::<span class="ident">Error</span><span class="op">&gt;</span> {
+        <span class="self">self</span>.<span class="number">0</span>.<span class="ident">poll</span>().<span class="ident">map</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">map</span>(<span class="op">|</span><span class="ident">y</span><span class="op">|</span> <span class="ident">RawBody</span> { <span class="ident">io</span>: <span class="ident">y</span> }))
+    }
+}
+
+<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span><span class="op">=</span><span class="string">&quot;sendfile&quot;</span>)]</span>
+<span class="kw">mod</span> <span class="ident">sendfile</span> {
+    <span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">tk_sendfile</span>;
+
+    <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">io</span>;
+    <span class="kw">use</span> <span class="ident">futures</span>::{<span class="ident">Async</span>};
+    <span class="kw">use</span> <span class="self">self</span>::<span class="ident">tk_sendfile</span>::{<span class="ident">Destination</span>, <span class="ident">FileOpener</span>, <span class="ident">Sendfile</span>};
+    <span class="kw">use</span> <span class="kw">super</span>::<span class="ident">RawBody</span>;
+
+    <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">T</span>: <span class="ident">Destination</span><span class="op">&gt;</span> <span class="ident">Destination</span> <span class="kw">for</span> <span class="ident">RawBody</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span> {
+        <span class="kw">fn</span> <span class="ident">write_file</span><span class="op">&lt;</span><span class="ident">O</span>: <span class="ident">FileOpener</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">file</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">Sendfile</span><span class="op">&lt;</span><span class="ident">O</span><span class="op">&gt;</span>)
+            <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">usize</span>, <span class="ident">io</span>::<span class="ident">Error</span><span class="op">&gt;</span>
+        {
+            <span class="comment">// TODO(tailhook) check the data written</span>
+            <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">get_mut</span>().<span class="ident">write_file</span>(<span class="ident">file</span>)
+        }
+        <span class="kw">fn</span> <span class="ident">poll_write</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Async</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+            <span class="self">self</span>.<span class="ident">io</span>.<span class="ident">get_ref</span>().<span class="ident">poll_write</span>()
+        }
+    }
+}
+</pre>
+</section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../../";
+        window.currentCrate = "tk_http";
+    </script>
+    <script src="../../../main.js"></script>
+    <script defer src="../../../search-index.js"></script>
+</body>
+</html>

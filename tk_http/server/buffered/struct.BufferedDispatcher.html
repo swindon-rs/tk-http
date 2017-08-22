@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `BufferedDispatcher` struct in crate `tk_http`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, BufferedDispatcher">
+
+    <title>tk_http::server::buffered::BufferedDispatcher - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc struct">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'>Struct BufferedDispatcher</p><div class="block items"><ul><li><a href="#methods">Methods</a></li><li><a href="#implementations">Trait Implementations</a></li></ul></div><p class='location'><a href='../../index.html'>tk_http</a>::<wbr><a href='../index.html'>server</a>::<wbr><a href='index.html'>buffered</a></p><script>window.sidebarCurrent = {name: 'BufferedDispatcher', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content">
+<h1 class='fqn'><span class='in-band'>Struct <a href='../../index.html'>tk_http</a>::<wbr><a href='../index.html'>server</a>::<wbr><a href='index.html'>buffered</a>::<wbr><a class="struct" href=''>BufferedDispatcher</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../../../src/tk_http/server/buffered.rs.html#35-41' title='goto source code'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct BufferedDispatcher&lt;S, N:&nbsp;<a class="trait" href="../../../tk_http/server/buffered/trait.NewService.html" title="trait tk_http::server::buffered::NewService">NewService</a>&lt;S&gt;&gt; { /* fields omitted */ }</pre><div class='docblock'><p>A dispatcher that allows to process request and return response using
+a one single function</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl&lt;S, N:&nbsp;<a class="trait" href="../../../tk_http/server/buffered/trait.NewService.html" title="trait tk_http::server::buffered::NewService">NewService</a>&lt;S&gt;&gt; <a class="struct" href="../../../tk_http/server/buffered/struct.BufferedDispatcher.html" title="struct tk_http::server::buffered::BufferedDispatcher">BufferedDispatcher</a>&lt;S, N&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../../src/tk_http/server/buffered.rs.html#202-219' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.new' class="method"><span id='new.v' class='invisible'><code>fn <a href='#method.new' class='fnname'>new</a>(<br>&nbsp;&nbsp;&nbsp;&nbsp;addr: <a class="enum" href="https://doc.rust-lang.org/nightly/std/net/addr/enum.SocketAddr.html" title="enum std::net::addr::SocketAddr">SocketAddr</a>, <br>&nbsp;&nbsp;&nbsp;&nbsp;handle: &amp;<a class="struct" href="https://docs.rs/tokio-core/0.1/tokio_core/reactor/struct.Handle.html" title="struct tokio_core::reactor::Handle">Handle</a>, <br>&nbsp;&nbsp;&nbsp;&nbsp;service: N<br>) -&gt; <a class="struct" href="../../../tk_http/server/buffered/struct.BufferedDispatcher.html" title="struct tk_http::server::buffered::BufferedDispatcher">BufferedDispatcher</a>&lt;S, N&gt;</code></span></h4>
+<div class='docblock'><p>Create an instance of bufferd dispatcher</p>
+</div><h4 id='method.max_request_length' class="method"><span id='max_request_length.v' class='invisible'><code>fn <a href='#method.max_request_length' class='fnname'>max_request_length</a>(&amp;mut self, value: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.usize.html">usize</a>)</code></span></h4>
+<div class='docblock'><p>Sets max request length</p>
+</div></div><h3 class='impl'><span class='in-band'><code>impl&lt;S, H, I, T, U&gt; <a class="struct" href="../../../tk_http/server/buffered/struct.BufferedDispatcher.html" title="struct tk_http::server::buffered::BufferedDispatcher">BufferedDispatcher</a>&lt;S, <a class="struct" href="../../../tk_http/server/buffered/struct.WebsocketFactory.html" title="struct tk_http::server::buffered::WebsocketFactory">WebsocketFactory</a>&lt;H, I&gt;&gt; <span class="where fmt-newline">where<br>&nbsp;&nbsp;&nbsp;&nbsp;H: <a class="trait" href="https://doc.rust-lang.org/nightly/core/ops/trait.Fn.html" title="trait core::ops::Fn">Fn</a>(<a class="struct" href="../../../tk_http/server/buffered/struct.Request.html" title="struct tk_http::server::buffered::Request">Request</a>, <a class="struct" href="../../../tk_http/server/struct.Encoder.html" title="struct tk_http::server::Encoder">Encoder</a>&lt;S&gt;) -&gt; T,<br>&nbsp;&nbsp;&nbsp;&nbsp;I: <a class="trait" href="https://doc.rust-lang.org/nightly/core/ops/trait.Fn.html" title="trait core::ops::Fn">Fn</a>(WriteFramed&lt;S, <a class="struct" href="../../../tk_http/websocket/struct.ServerCodec.html" title="struct tk_http::websocket::ServerCodec">WebsocketCodec</a>&gt;, ReadFramed&lt;S, <a class="struct" href="../../../tk_http/websocket/struct.ServerCodec.html" title="struct tk_http::websocket::ServerCodec">WebsocketCodec</a>&gt;) -&gt; U,<br>&nbsp;&nbsp;&nbsp;&nbsp;T: <a class="trait" href="https://docs.rs/futures/0.1/futures/future/trait.Future.html" title="trait futures::future::Future">Future</a>&lt;Item = <a class="struct" href="../../../tk_http/server/struct.EncoderDone.html" title="struct tk_http::server::EncoderDone">EncoderDone</a>&lt;S&gt;, Error = <a class="struct" href="../../../tk_http/server/struct.Error.html" title="struct tk_http::server::Error">Error</a>&gt;,<br>&nbsp;&nbsp;&nbsp;&nbsp;U: <a class="trait" href="https://docs.rs/futures/0.1/futures/future/trait.Future.html" title="trait futures::future::Future">Future</a>&lt;Item = <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>, Error = <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>&gt; + 'static,&nbsp;</span></code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../../src/tk_http/server/buffered.rs.html#221-245' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.new_with_websockets' class="method"><span id='new_with_websockets.v' class='invisible'><code>fn <a href='#method.new_with_websockets' class='fnname'>new_with_websockets</a>(<br>&nbsp;&nbsp;&nbsp;&nbsp;addr: <a class="enum" href="https://doc.rust-lang.org/nightly/std/net/addr/enum.SocketAddr.html" title="enum std::net::addr::SocketAddr">SocketAddr</a>, <br>&nbsp;&nbsp;&nbsp;&nbsp;handle: &amp;<a class="struct" href="https://docs.rs/tokio-core/0.1/tokio_core/reactor/struct.Handle.html" title="struct tokio_core::reactor::Handle">Handle</a>, <br>&nbsp;&nbsp;&nbsp;&nbsp;http: H, <br>&nbsp;&nbsp;&nbsp;&nbsp;websockets: I<br>) -&gt; <a class="struct" href="../../../tk_http/server/buffered/struct.BufferedDispatcher.html" title="struct tk_http::server::buffered::BufferedDispatcher">BufferedDispatcher</a>&lt;S, <a class="struct" href="../../../tk_http/server/buffered/struct.WebsocketFactory.html" title="struct tk_http::server::buffered::WebsocketFactory">WebsocketFactory</a>&lt;H, I&gt;&gt;</code></span></h4>
+<div class='docblock'><p>Creates a dispatcher with two functions: one serving http requests and
+websockets.</p>
+</div></div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><span class='in-band'><code>impl&lt;S, N:&nbsp;<a class="trait" href="../../../tk_http/server/buffered/trait.NewService.html" title="trait tk_http::server::buffered::NewService">NewService</a>&lt;S&gt;&gt; <a class="trait" href="../../../tk_http/server/trait.Dispatcher.html" title="trait tk_http::server::Dispatcher">Dispatcher</a>&lt;S&gt; for <a class="struct" href="../../../tk_http/server/buffered/struct.BufferedDispatcher.html" title="struct tk_http::server::buffered::BufferedDispatcher">BufferedDispatcher</a>&lt;S, N&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../../src/tk_http/server/buffered.rs.html#247-274' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='associatedtype.Codec' class="type"><span id='Codec.t' class='invisible'><code>type <a href='../../../tk_http/server/trait.Dispatcher.html#associatedtype.Codec' class="type">Codec</a> = <a class="struct" href="../../../tk_http/server/buffered/struct.BufferedCodec.html" title="struct tk_http::server::buffered::BufferedCodec">BufferedCodec</a>&lt;N::<a class="trait" href="../../../tk_http/server/buffered/trait.NewService.html" title="trait tk_http::server::buffered::NewService">Instance</a>&gt;</code></span></h4>
+<div class='docblock'><p>The codec type  for this dispatcher <a href="../../../tk_http/server/trait.Dispatcher.html#associatedtype.Codec">Read more</a></p>
+</div><h4 id='method.headers_received' class="method"><span id='headers_received.v' class='invisible'><code>fn <a href='../../../tk_http/server/trait.Dispatcher.html#tymethod.headers_received' class='fnname'>headers_received</a>(&amp;mut self, headers: &amp;<a class="struct" href="../../../tk_http/server/struct.Head.html" title="struct tk_http::server::Head">Head</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;Self::<a class="trait" href="../../../tk_http/server/trait.Dispatcher.html" title="trait tk_http::server::Dispatcher">Codec</a>, <a class="struct" href="../../../tk_http/server/struct.Error.html" title="struct tk_http::server::Error">Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Received headers of a request <a href="../../../tk_http/server/trait.Dispatcher.html#tymethod.headers_received">Read more</a></p>
+</div></div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../../";
+        window.currentCrate = "tk_http";
+    </script>
+    <script src="../../../main.js"></script>
+    <script defer src="../../../search-index.js"></script>
+</body>
+</html>
