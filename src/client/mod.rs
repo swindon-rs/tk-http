@@ -12,7 +12,7 @@ pub mod buffered;
 
 pub use self::errors::Error;
 pub use self::client::{Client, Codec};
-pub use self::encoder::{Encoder, EncoderDone};
+pub use self::encoder::{Encoder, EncoderDone, WaitFlush};
 pub use self::proto::{Proto};
 
 use std::borrow::Cow;

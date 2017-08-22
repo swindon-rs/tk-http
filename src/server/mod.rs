@@ -12,7 +12,8 @@ mod recv_mode;
 pub mod buffered;
 
 pub use self::error::Error;
-pub use self::encoder::{Encoder, EncoderDone, FutureRawBody, RawBody};
+pub use self::encoder::{Encoder, EncoderDone};
+pub use self::encoder::{WaitFlush, FutureRawBody, RawBody};
 pub use self::codec::{Codec, Dispatcher};
 pub use self::proto::Proto;
 pub use self::headers::{Head, HeaderIter};

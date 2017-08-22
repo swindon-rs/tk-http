@@ -1,7 +1,7 @@
 use std::io;
 use std::fmt::Display;
 
-use futures::{Future, Poll};
+use futures::{Future, Poll, Async};
 use tk_bufstream::{WriteBuf, WriteRaw, FutureWriteRaw};
 use tokio_io::AsyncWrite;
 
@@ -43,6 +43,11 @@ pub struct ResponseConfig {
 ///
 /// This future is created by `Encoder::raw_body()``
 pub struct FutureRawBody<S>(FutureWriteRaw<S>);
+
+/// A future that yields `Encoder` again after buffer has less bytes
+///
+/// This future is created by `Encoder::wait_flush(x)``
+pub struct WaitFlush<S>(Option<Encoder<S>>, usize);
 
 /// The actual raw body
 ///
@@ -271,6 +276,13 @@ impl<S> Encoder<S> {
     pub fn bytes_buffered(&mut self) -> usize {
         self.io.out_buf.len()
     }
+
+    /// Returns future which yield encoder back when buffer is flushed
+    ///
+    /// More specifically when `butes_buffered()` < `watermark`
+    pub fn wait_flush(self, watermark: usize) -> WaitFlush<S> {
+        WaitFlush(Some(self), watermark)
+    }
 }
 
 impl<S> RawBody<S> {
@@ -348,6 +360,23 @@ impl<S: AsyncWrite> Future for FutureRawBody<S> {
     type Error = io::Error;
     fn poll(&mut self) -> Poll<RawBody<S>, io::Error> {
         self.0.poll().map(|x| x.map(|y| RawBody { io: y }))
+    }
+}
+
+impl<S: AsyncWrite> Future for WaitFlush<S> {
+    type Item = Encoder<S>;
+    type Error = io::Error;
+    fn poll(&mut self) -> Result<Async<Encoder<S>>, io::Error> {
+        let bytes_left = {
+            let enc = self.0.as_mut().expect("future is polled twice");
+            enc.flush()?;
+            enc.io.out_buf.len()
+        };
+        if bytes_left < self.1 {
+            Ok(Async::Ready(self.0.take().unwrap()))
+        } else {
+            Ok(Async::NotReady)
+        }
     }
 }
 

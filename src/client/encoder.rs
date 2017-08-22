@@ -3,7 +3,10 @@ use std::fmt::Display;
 use std::ascii::AsciiExt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+
 use tk_bufstream::WriteBuf;
+use futures::{Future, Async};
+use tokio_io::AsyncWrite;
 
 use enums::Version;
 use headers::is_close;
@@ -32,6 +35,11 @@ pub struct Encoder<S> {
 pub struct EncoderDone<S> {
     buf: WriteBuf<S>,
 }
+
+/// A future that yields `Encoder` again after buffer has less bytes
+///
+/// This future is created by `Encoder::wait_flush(x)``
+pub struct WaitFlush<S>(Option<Encoder<S>>, usize);
 
 pub fn get_inner<S>(e: EncoderDone<S>) -> WriteBuf<S> {
     e.buf
@@ -167,6 +175,50 @@ impl<S> Encoder<S> {
     pub fn done(mut self) -> EncoderDone<S> {
         self.message.done(&mut self.buf.out_buf);
         EncoderDone { buf: self.buf }
+    }
+
+    /// Flush the data to underlying socket
+    ///
+    /// If the whole buffer could not be flushed it schedules a wakeup of
+    /// the current task when the the socket is writable.
+    ///
+    /// You can find out how many bytes are left using `bytes_buffered()`
+    /// method
+    pub fn flush(&mut self) -> Result<(), io::Error>
+        where S: AsyncWrite
+    {
+        self.buf.flush()
+    }
+    /// Returns bytes currently lying in the buffer
+    ///
+    /// It's possible that these bytes are left from the previous request if
+    /// pipelining is enabled.
+    pub fn bytes_buffered(&mut self) -> usize {
+        self.buf.out_buf.len()
+    }
+
+    /// Returns future which yield encoder back when buffer is flushed
+    ///
+    /// More specifically when `butes_buffered()` < `watermark`
+    pub fn wait_flush(self, watermark: usize) -> WaitFlush<S> {
+        WaitFlush(Some(self), watermark)
+    }
+}
+
+impl<S: AsyncWrite> Future for WaitFlush<S> {
+    type Item = Encoder<S>;
+    type Error = io::Error;
+    fn poll(&mut self) -> Result<Async<Encoder<S>>, io::Error> {
+        let bytes_left = {
+            let enc = self.0.as_mut().expect("future is polled twice");
+            enc.flush()?;
+            enc.buf.out_buf.len()
+        };
+        if bytes_left < self.1 {
+            Ok(Async::Ready(self.0.take().unwrap()))
+        } else {
+            Ok(Async::NotReady)
+        }
     }
 }
 
