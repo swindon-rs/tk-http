@@ -100,6 +100,7 @@ impl<S: AsyncRead + AsyncWrite, C: Codec<S>> Sink for Proto<S, C> {
         -> StartSend<Self::SinkItem, Self::SinkError>
     {
         let old_timeout = self.proto.get_timeout();
+        self.proto.poll_complete()?;
         let res = self.proto.start_send(item)?;
         let new_timeout = self.proto.get_timeout();
         let now = Instant::now();
