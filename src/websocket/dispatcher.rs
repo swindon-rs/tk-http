@@ -326,7 +326,7 @@ impl<S, T, D, E> Future for Loop<S, T, D>
                 Async::Ready(()) => {
                     debug!("Sending ping");
                     write_packet(&mut self.output.out_buf,
-                                 0x9, b"swindon-ping", !self.server);
+                                 0x9, b"tk-http-ping", !self.server);
                     self.output.flush().map_err(ErrorEnum::Io)?;
                     let deadline = Instant::now() -
                         self.config.inactivity_timeout;
