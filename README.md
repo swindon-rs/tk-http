@@ -1,11 +1,11 @@
 Tk-HTTP
 =======
 
-.. image:: https://travis-ci.org/swindon-rs/tk-http.svg?branch=master
-   :target: https://travis-ci.org/swindon-rs/tk-http
+**Status: Beta**
 
-:Status: Beta
-:Documentation: https://swindon-rs.github.io/tk-http
+[Documentation](https://docs.rs/tk-http) |
+[Github](https://github.com/swindon-rs/tk-http) |
+[Crate](https://crates.io/crates/tk-http)
 
 A full-features asynchronous HTTP implementation for tokio-rs stack, including
 websockets.

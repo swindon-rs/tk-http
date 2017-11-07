@@ -9,7 +9,7 @@ authors = [
     "Alexey Popravka <alexey.popravka@horsedevel.com>",
     "Paul Colomiets <paul@colomiets.name>"]
 license = "MIT/Apache-2.0"
-readme = "README.rst"
+readme = "README.md"
 keywords = ["http", "websockets", "tokio"]
 categories = [
     "asynchronous",
