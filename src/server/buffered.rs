@@ -193,7 +193,7 @@ impl<S, T, F> Service<S> for T
                                   _input: ReadFramed<S, WebsocketCodec>)
         -> Self::WebsocketFuture
     {
-        /// Basically no websockets
+        // Basically no websockets
         Ok(()).into_future()
     }
 }

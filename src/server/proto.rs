@@ -125,7 +125,7 @@ impl<S, D: Dispatcher<S>> PureProto<S, D> {
         use self::InState::*;
         let mut changed = false;
         let mut inbuf = self.inbuf.as_mut();
-        let mut inbuf = if let Some(ref mut inbuf) = inbuf {
+        let inbuf = if let Some(ref mut inbuf) = inbuf {
             inbuf
         } else {
             // Buffer has been stolen

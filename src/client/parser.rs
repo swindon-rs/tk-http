@@ -258,8 +258,8 @@ impl<S, C: Codec<S>> Parser<S, C> {
                         Some(self.codec.data_received(
                             &io.in_buf[..bytes], true)?)
                     } else if io.done() {
-                        /// If it's ReadUntilEof it will be detected in
-                        /// check_buf so we can safefully put error here
+                        // If it's ReadUntilEof it will be detected in
+                        // check_buf so we can safefully put error here
                         return Err(ErrorEnum::ResetOnResponseBody.into());
                     } else if matches!(*mode, Progressive(x) if x <= bytes) {
                         Some(self.codec.data_received(
