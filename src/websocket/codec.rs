@@ -1,8 +1,7 @@
 use std::io;
 use tk_bufstream::{Buf, Encode, Decode};
 
-use websocket::{Packet};
-use websocket::zero_copy::{parse_frame, write_packet, write_close};
+use websocket::{Packet, Frame};
 use websocket::error::Error;
 
 
@@ -23,22 +22,15 @@ pub struct ClientCodec;
 impl Encode for ServerCodec {
     type Item = Packet;
     fn encode(&mut self, data: Packet, buf: &mut Buf) {
-        use super::Packet::*;
-        match data {
-            Ping(data) => write_packet(buf, 0x9, &data, false),
-            Pong(data) => write_packet(buf, 0xA, &data, false),
-            Text(data) => write_packet(buf, 0x1, data.as_bytes(), false),
-            Binary(data) => write_packet(buf, 0x2, &data, false),
-            // TODO(tailhook) should we also change state somehow?
-            Close(c, t) => write_close(buf, c, &t, false),
-        }
+        // TODO(tailhook) should we also change state on close somehow?
+        Frame::from(&data).write(buf, false)
     }
 }
 
 impl Decode for ServerCodec {
     type Item = Packet;
     fn decode(&mut self, buf: &mut Buf) -> Result<Option<Packet>, io::Error> {
-        let parse_result = parse_frame(buf, MAX_PACKET_SIZE, true)
+        let parse_result = Frame::parse(buf, MAX_PACKET_SIZE, true)
             // TODO(tailhook) fix me when error type in bufstream
             // is associated type
             .map_err(|e| io::Error::new(io::ErrorKind::Other, Error::from(e)))?
@@ -55,22 +47,15 @@ impl Decode for ServerCodec {
 impl Encode for ClientCodec {
     type Item = Packet;
     fn encode(&mut self, data: Packet, buf: &mut Buf) {
-        use super::Packet::*;
-        match data {
-            Ping(data) => write_packet(buf, 0x9, &data, true),
-            Pong(data) => write_packet(buf, 0xA, &data, true),
-            Text(data) => write_packet(buf, 0x1, data.as_bytes(), true),
-            Binary(data) => write_packet(buf, 0x2, &data, true),
-            // TODO(tailhook) should we also change state somehow?
-            Close(c, t) => write_close(buf, c, &t, true),
-        }
+        // TODO(tailhook) should we also change state on close somehow?
+        Frame::from(&data).write(buf, true)
     }
 }
 
 impl Decode for ClientCodec {
     type Item = Packet;
     fn decode(&mut self, buf: &mut Buf) -> Result<Option<Packet>, io::Error> {
-        let parse_result = parse_frame(buf, MAX_PACKET_SIZE, false)
+        let parse_result = Frame::parse(buf, MAX_PACKET_SIZE, false)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?
             .map(|(p, b)| (p.into(), b));
         if let Some((p, b)) = parse_result {

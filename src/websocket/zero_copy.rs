@@ -51,77 +51,99 @@ impl<'a> Into<Packet> for &'a Frame<'a> {
     }
 }
 
+impl<'a> Frame<'a> {
+    /// Parse a frame for the specified buffer
+    ///
+    /// Returns a frame and a number of bytes or None if no full frame was
+    /// in the buffer. After frame is processes you should use
+    /// `buf.consume(nbytes)`.
+    pub fn parse<'x>(buf: &'x mut Buf, limit: usize, masked: bool)
+        -> Result<Option<(Frame<'x>, usize)>, ErrorEnum>
+    {
+        use self::Frame::*;
 
-pub fn parse_frame<'x>(buf: &'x mut Buf, limit: usize, masked: bool)
-    -> Result<Option<(Frame<'x>, usize)>, ErrorEnum>
-{
-    use self::Frame::*;
-
-    if buf.len() < 2 {
-        return Ok(None);
-    }
-    let (size, fsize) = {
-        match buf[1] & 0x7F {
-            126 => {
-                if buf.len() < 4 {
-                    return Ok(None);
+        if buf.len() < 2 {
+            return Ok(None);
+        }
+        let (size, fsize) = {
+            match buf[1] & 0x7F {
+                126 => {
+                    if buf.len() < 4 {
+                        return Ok(None);
+                    }
+                    (BigEndian::read_u16(&buf[2..4]) as u64, 4)
                 }
-                (BigEndian::read_u16(&buf[2..4]) as u64, 4)
-            }
-            127 => {
-                if buf.len() < 10 {
-                    return Ok(None);
+                127 => {
+                    if buf.len() < 10 {
+                        return Ok(None);
+                    }
+                    (BigEndian::read_u64(&buf[2..10]), 10)
                 }
-                (BigEndian::read_u64(&buf[2..10]), 10)
+                size => (size as u64, 2),
             }
-            size => (size as u64, 2),
+        };
+        if size > limit as u64 {
+            return Err(ErrorEnum::TooLong);
         }
-    };
-    if size > limit as u64 {
-        return Err(ErrorEnum::TooLong);
-    }
-    let size = size as usize;
-    let start = fsize + if masked { 4 } else { 0 } /* mask size */;
-    if buf.len() < start + size {
-        return Ok(None);
+        let size = size as usize;
+        let start = fsize + if masked { 4 } else { 0 } /* mask size */;
+        if buf.len() < start + size {
+            return Ok(None);
+        }
+
+        let fin = buf[0] & 0x80 != 0;
+        let opcode = buf[0] & 0x0F;
+        // TODO(tailhook) should we assert that reserved bits are zero?
+        let mask = buf[1] & 0x80 != 0;
+        if !fin {
+            return Err(ErrorEnum::Fragmented);
+        }
+        if mask != masked {
+            return Err(ErrorEnum::Unmasked);
+        }
+        if mask {
+            let mask = [buf[start-4], buf[start-3], buf[start-2], buf[start-1]];
+            for idx in 0..size { // hopefully llvm is smart enough to optimize it
+                buf[start + idx] ^= mask[idx % 4];
+            }
+        }
+        let data = &buf[start..(start + size)];
+        let frame = match opcode {
+            0x9 => Ping(data),
+            0xA => Pong(data),
+            0x1 => Text(from_utf8(data)?),
+            0x2 => Binary(data),
+            // TODO(tailhook) implement shutdown packets
+            0x8 => {
+                if data.len() < 2 {
+                    Close(1006, "")
+                } else {
+                    Close(BigEndian::read_u16(&data[..2]), from_utf8(&data[2..])?)
+                }
+            }
+            x => return Err(ErrorEnum::InvalidOpcode(x)),
+        };
+        return Ok(Some((frame, start + size)));
     }
 
-    let fin = buf[0] & 0x80 != 0;
-    let opcode = buf[0] & 0x0F;
-    // TODO(tailhook) should we assert that reserved bits are zero?
-    let mask = buf[1] & 0x80 != 0;
-    if !fin {
-        return Err(ErrorEnum::Fragmented);
-    }
-    if mask != masked {
-        return Err(ErrorEnum::Unmasked);
-    }
-    if mask {
-        let mask = [buf[start-4], buf[start-3], buf[start-2], buf[start-1]];
-        for idx in 0..size { // hopefully llvm is smart enough to optimize it
-            buf[start + idx] ^= mask[idx % 4];
+    /// Write a frame into specified buffer
+    ///
+    /// `masked` should be true for client socket and false for servers socket
+    /// according to the spec
+    pub fn write(&self, buf: &mut Buf, masked: bool) {
+        use self::Frame::*;
+        match *self {
+            Ping(data) => write_packet(buf, 0x9, &data, masked),
+            Pong(data) => write_packet(buf, 0xA, &data, masked),
+            Text(data) => write_packet(buf, 0x1, data.as_bytes(), masked),
+            Binary(data) => write_packet(buf, 0x2, &data, masked),
+            Close(c, t) => write_close(buf, c, &t, masked),
         }
     }
-    let data = &buf[start..(start + size)];
-    let frame = match opcode {
-        0x9 => Ping(data),
-        0xA => Pong(data),
-        0x1 => Text(from_utf8(data)?),
-        0x2 => Binary(data),
-        // TODO(tailhook) implement shutdown packets
-        0x8 => {
-            if data.len() < 2 {
-                Close(1006, "")
-            } else {
-                Close(BigEndian::read_u16(&data[..2]), from_utf8(&data[2..])?)
-            }
-        }
-        x => return Err(ErrorEnum::InvalidOpcode(x)),
-    };
-    return Ok(Some((frame, start + size)));
 }
 
-pub fn write_packet(buf: &mut Buf, opcode: u8, data: &[u8], mask: bool) {
+pub(crate) fn write_packet(buf: &mut Buf, opcode: u8, data: &[u8], mask: bool)
+{
     debug_assert!(opcode & 0xF0 == 0);
     let first_byte = opcode | 0x80;  // always fin
     let mask_bit = if mask { 0x80 } else { 0 };
@@ -162,7 +184,7 @@ pub fn write_packet(buf: &mut Buf, opcode: u8, data: &[u8], mask: bool) {
 }
 
 /// Write close message to websocket
-pub fn write_close(buf: &mut Buf, code: u16, reason: &str, mask: bool) {
+pub(crate) fn write_close(buf: &mut Buf, code: u16, reason: &str, mask: bool) {
     let data = reason.as_bytes();
     let mask_bit = if mask { 0x80 } else { 0 };
     assert!(data.len() <= 123);
@@ -188,14 +210,14 @@ pub fn write_close(buf: &mut Buf, code: u16, reason: &str, mask: bool) {
 mod test {
     use netbuf::Buf;
     use std::iter::repeat;
-    use super::parse_frame;
+    use super::Frame;
     use super::Frame::*;
 
     #[test]
     fn empty_frame() {
         let mut buf = Buf::new();
-        assert_eq!(parse_frame(&mut buf, 1000, false).unwrap(), None);
-        assert_eq!(parse_frame(&mut buf, 1000, true).unwrap(), None);
+        assert_eq!(Frame::parse(&mut buf, 1000, false).unwrap(), None);
+        assert_eq!(Frame::parse(&mut buf, 1000, true).unwrap(), None);
     }
 
     #[test]
@@ -203,7 +225,7 @@ mod test {
         let mut buf = Buf::new();
         let data = b"\x88\x80\x00\x00\x00\x00";
         buf.extend(data);
-        assert_eq!(parse_frame(&mut buf, 1000, true).unwrap(),
+        assert_eq!(Frame::parse(&mut buf, 1000, true).unwrap(),
                    Some((Close(1006, ""), 6)));
     }
 
@@ -213,11 +235,11 @@ mod test {
         for i in 0..data.len()-1 {
             let mut buf = Buf::new();
             buf.extend(&data[..i]);
-            assert_eq!(parse_frame(&mut buf, 1000, true).unwrap(), None);
+            assert_eq!(Frame::parse(&mut buf, 1000, true).unwrap(), None);
         }
         let mut buf = Buf::new();
         buf.extend(data);
-        assert_eq!(parse_frame(&mut buf, 1000, true).unwrap(),
+        assert_eq!(Frame::parse(&mut buf, 1000, true).unwrap(),
             Some((Text("hello"), 11)));
     }
 
@@ -230,14 +252,14 @@ mod test {
             for _ in 0..i {
                 buf.extend(&[b'x']);
             }
-            assert_eq!(parse_frame(&mut buf, 1000, true).unwrap(), None);
+            assert_eq!(Frame::parse(&mut buf, 1000, true).unwrap(), None);
         }
         let mut buf = Buf::new();
         buf.extend(data);
         for _ in 0..125 {
             buf.extend(&[b'x']);
         }
-        assert_eq!(parse_frame(&mut buf, 1000, true).unwrap(),
+        assert_eq!(Frame::parse(&mut buf, 1000, true).unwrap(),
             Some((Text(&repeat('x').take(125).collect::<String>()), 131)));
     }
     #[test]
@@ -249,14 +271,14 @@ mod test {
             for _ in 0..i {
                 buf.extend(&[b'x']);
             }
-            assert_eq!(parse_frame(&mut buf, 4096, true).unwrap(), None);
+            assert_eq!(Frame::parse(&mut buf, 4096, true).unwrap(), None);
         }
         let mut buf = Buf::new();
         buf.extend(data);
         for _ in 0..4096 {
             buf.extend(&[b'x']);
         }
-        assert_eq!(parse_frame(&mut buf, 4096, true).unwrap(),
+        assert_eq!(Frame::parse(&mut buf, 4096, true).unwrap(),
             Some((Text(&repeat('x').take(4096).collect::<String>()), 4104)));
     }
 
@@ -266,11 +288,11 @@ mod test {
         for i in 0..data.len()-1 {
             let mut buf = Buf::new();
             buf.extend(&data[..i]);
-            assert_eq!(parse_frame(&mut buf, 1000, false).unwrap(), None);
+            assert_eq!(Frame::parse(&mut buf, 1000, false).unwrap(), None);
         }
         let mut buf = Buf::new();
         buf.extend(data);
-        assert_eq!(parse_frame(&mut buf, 1000, false).unwrap(),
+        assert_eq!(Frame::parse(&mut buf, 1000, false).unwrap(),
             Some((Text("hello"), 7)));
     }
 
@@ -283,14 +305,14 @@ mod test {
             for _ in 0..i {
                 buf.extend(&[b'x']);
             }
-            assert_eq!(parse_frame(&mut buf, 1000, false).unwrap(), None);
+            assert_eq!(Frame::parse(&mut buf, 1000, false).unwrap(), None);
         }
         let mut buf = Buf::new();
         buf.extend(data);
         for _ in 0..125 {
             buf.extend(&[b'x']);
         }
-        assert_eq!(parse_frame(&mut buf, 1000, false).unwrap(),
+        assert_eq!(Frame::parse(&mut buf, 1000, false).unwrap(),
             Some((Text(&repeat('x').take(125).collect::<String>()), 127)));
     }
     #[test]
@@ -302,14 +324,14 @@ mod test {
             for _ in 0..i {
                 buf.extend(&[b'x']);
             }
-            assert_eq!(parse_frame(&mut buf, 4096, false).unwrap(), None);
+            assert_eq!(Frame::parse(&mut buf, 4096, false).unwrap(), None);
         }
         let mut buf = Buf::new();
         buf.extend(data);
         for _ in 0..4096 {
             buf.extend(&[b'x']);
         }
-        assert_eq!(parse_frame(&mut buf, 4096, false).unwrap(),
+        assert_eq!(Frame::parse(&mut buf, 4096, false).unwrap(),
             Some((Text(&repeat('x').take(4096).collect::<String>()), 4100)));
     }
 }

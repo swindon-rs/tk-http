@@ -13,7 +13,7 @@ use tokio_core::reactor::{Handle, Timeout};
 
 use websocket::{Frame, Config, Packet, Error, ServerCodec, ClientCodec};
 use websocket::error::ErrorEnum;
-use websocket::zero_copy::{parse_frame, write_packet, write_close};
+use websocket::zero_copy::{write_packet, write_close};
 
 
 /// Dispatches messages received from websocket
@@ -240,7 +240,7 @@ impl<S, T, D, E> Loop<S, T, D>
         loop {
             while self.input.in_buf.len() > 0 {
                 let (fut, nbytes) = match
-                    parse_frame(&mut self.input.in_buf,
+                    Frame::parse(&mut self.input.in_buf,
                                 self.config.max_packet_size, self.server)?
                 {
                     Some((frame, nbytes)) => {
