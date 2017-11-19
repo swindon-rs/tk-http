@@ -38,10 +38,8 @@ containers:
     - !Install
       - ca-certificates
       - build-essential
-      - zlib1g-dev
       - libssl-dev
       - pkg-config
-      - libcurl4-openssl-dev
 
     - !TarInstall
       url: "https://static.rust-lang.org/dist/rust-1.21.0-x86_64-unknown-linux-gnu.tar.gz"
@@ -52,7 +50,6 @@ containers:
       url: "https://github.com/tailhook/bulk/releases/download/v0.4.9/bulk-v0.4.9.tar.gz"
       sha256: 23471a9986274bb4b7098c03e2eb7e1204171869b72c45385fcee1c64db2d111
       path: /
-    - !Sh cargo install --root=/usr cargo-outdated
 
     environ:
       HOME: /work/target
