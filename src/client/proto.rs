@@ -274,7 +274,7 @@ impl<S: AsyncRead + AsyncWrite, C: Codec<S>> Sink for PureProto<S, C> {
                 Async::Ready(done) => {
                     let mut io = get_inner(done);
                     io.flush().map_err(ErrorEnum::Io)?;
-                    OutState::Idle(io, start)
+                    OutState::Idle(io, Instant::now())
                 }
                 Async::NotReady => OutState::Write(fut, start),
             },
@@ -310,7 +310,17 @@ impl<S: AsyncRead + AsyncWrite, C: Codec<S>> Sink for PureProto<S, C> {
                             Async::NotReady => {
                                 (InState::Read(parser, time), false)
                             }
-                            Async::Ready(Some(io)) => (InState::Idle(io), true),
+                            Async::Ready(Some(io)) => {
+                                // after request is done, rearm keep-alive
+                                // timeout
+                                match self.writing {
+                                    OutState::Idle(_, ref mut time) => {
+                                        *time = Instant::now();
+                                    }
+                                    _ => {}
+                                }
+                                (InState::Idle(io), true)
+                            }
                             Async::Ready(None) => {
                                 return Err(ErrorEnum::Closed.into());
                             }
