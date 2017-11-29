@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::cmp::max;
 use std::mem;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -24,7 +25,7 @@ enum OutState<S, F> {
 }
 
 enum InState<S, C: Codec<S>> {
-    Idle(ReadBuf<S>),
+    Idle(ReadBuf<S>, Instant),
     Read(Parser<S, C>, Instant),
     Void,
 }
@@ -67,7 +68,7 @@ impl<S, C: Codec<S>> Proto<S, C> {
                 writing: OutState::Idle(cout, Instant::now()),
                 waiting: VecDeque::with_capacity(
                     cfg.inflight_request_prealloc),
-                reading: InState::Idle(cin),
+                reading: InState::Idle(cin, Instant::now()),
                 close: Arc::new(AtomicBool::new(false)),
                 config: cfg.clone(),
             },
@@ -161,8 +162,9 @@ impl<S, C: Codec<S>> PureProto<S, C> {
             OutState::Idle(_, time) => {
                 if self.waiting.len() == 0 {
                     match self.reading {
-                        InState::Idle(..) => {
-                            return time + self.config.keep_alive_timeout;
+                        InState::Idle(.., rtime) => {
+                            return max(time, rtime) +
+                                self.config.keep_alive_timeout;
                         }
                         InState::Read(_, time) => {
                             return time + self.config.max_request_timeout;
@@ -283,7 +285,7 @@ impl<S: AsyncRead + AsyncWrite, C: Codec<S>> Sink for PureProto<S, C> {
         loop {
             let (state, cont) =
                 match mem::replace(&mut self.reading, InState::Void) {
-                    InState::Idle(mut io) => {
+                    InState::Idle(mut io, time) => {
                         if let Some(w) = self.waiting.pop_front() {
                             let Waiting { codec: nr, state, queued_at } = w;
                             let parser = Parser::new(io, nr,
@@ -302,7 +304,7 @@ impl<S: AsyncRead + AsyncWrite, C: Codec<S>> Sink for PureProto<S, C> {
                             if io.done() {
                                 return Err(ErrorEnum::Closed.into());
                             }
-                            (InState::Idle(io), false)
+                            (InState::Idle(io, time), false)
                         }
                     }
                     InState::Read(mut parser, time) => {
@@ -319,7 +321,7 @@ impl<S: AsyncRead + AsyncWrite, C: Codec<S>> Sink for PureProto<S, C> {
                                     }
                                     _ => {}
                                 }
-                                (InState::Idle(io), true)
+                                (InState::Idle(io, Instant::now()), true)
                             }
                             Async::Ready(None) => {
                                 return Err(ErrorEnum::Closed.into());
