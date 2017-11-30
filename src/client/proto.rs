@@ -156,6 +156,14 @@ impl<S: AsyncRead + AsyncWrite, C: Codec<S>> PureProto<S, C> {
                             (InState::Read(parser, time), false)
                         }
                         Async::Ready(Some(io)) => {
+                            // after request is done, rearm keep-alive
+                            // timeout
+                            match self.writing {
+                                OutState::Idle(_, ref mut time) => {
+                                    *time = Instant::now();
+                                }
+                                _ => {}
+                            }
                             (InState::Idle(io, Instant::now()), true)
                         }
                         Async::Ready(None) => {
