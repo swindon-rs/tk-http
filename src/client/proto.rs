@@ -94,15 +94,100 @@ impl<C: Codec<TcpStream>> Proto<TcpStream, C> {
         as Box<Future<Item=_, Error=_>>
     }
 }
+
+impl<S: AsyncRead + AsyncWrite, C: Codec<S>> PureProto<S, C> {
+    fn poll_writing(&mut self) -> Result<bool, Error> {
+        let mut progress = false;
+        self.writing = match mem::replace(&mut self.writing, OutState::Void) {
+            OutState::Idle(mut io, time) => {
+                io.flush().map_err(ErrorEnum::Io)?;
+                if time.elapsed() > self.config.keep_alive_timeout &&
+                    self.waiting.len() == 0 &&
+                    matches!(self.reading, InState::Idle(..))
+                {
+                    return Err(ErrorEnum::KeepAliveTimeout.into());
+                }
+                OutState::Idle(io, time)
+            }
+            // Note we break connection if serializer errored, because
+            // we don't actually know if connection can be reused
+            // safefully in this case
+            OutState::Write(mut fut, start) => match fut.poll()? {
+                Async::Ready(done) => {
+                    let mut io = get_inner(done);
+                    io.flush().map_err(ErrorEnum::Io)?;
+                    progress = true;
+                    OutState::Idle(io, Instant::now())
+                }
+                Async::NotReady => OutState::Write(fut, start),
+            },
+            OutState::Void => unreachable!(),
+        };
+        return Ok(progress);
+    }
+    fn poll_reading(&mut self) -> Result<bool, Error> {
+        let (state, progress) =
+            match mem::replace(&mut self.reading, InState::Void) {
+                InState::Idle(mut io, time) => {
+                    if let Some(w) = self.waiting.pop_front() {
+                        let Waiting { codec: nr, state, queued_at } = w;
+                        let parser = Parser::new(io, nr,
+                            state, self.close.clone());
+                        (InState::Read(parser, queued_at), true)
+                    } else {
+                        // This serves for two purposes:
+                        // 1. Detect connection has been closed (i.e.
+                        //    we need to call `poll_read()` every time)
+                        // 2. Detect premature bytes (we didn't sent
+                        //    a request yet, but there is a response)
+                        if io.read().map_err(ErrorEnum::Io)? != 0 {
+                            return Err(
+                                ErrorEnum::PrematureResponseHeaders.into());
+                        }
+                        if io.done() {
+                            return Err(ErrorEnum::Closed.into());
+                        }
+                        (InState::Idle(io, time), false)
+                    }
+                }
+                InState::Read(mut parser, time) => {
+                    match parser.poll()? {
+                        Async::NotReady => {
+                            (InState::Read(parser, time), false)
+                        }
+                        Async::Ready(Some(io)) => {
+                            (InState::Idle(io, Instant::now()), true)
+                        }
+                        Async::Ready(None) => {
+                            return Err(ErrorEnum::Closed.into());
+                        }
+                    }
+                }
+                InState::Void => unreachable!(),
+            };
+        self.reading = state;
+        Ok(progress)
+    }
+}
+
 impl<S: AsyncRead + AsyncWrite, C: Codec<S>> Sink for Proto<S, C> {
     type SinkItem = C;
     type SinkError = Error;
-    fn start_send(&mut self, item: Self::SinkItem)
+    fn start_send(&mut self, mut item: Self::SinkItem)
         -> StartSend<Self::SinkItem, Self::SinkError>
     {
         let old_timeout = self.proto.get_timeout();
-        let res = self.proto.start_send(item)?;
-        self.proto.poll_complete()?;
+        let res = loop {
+            item = match self.proto.start_send(item)? {
+                AsyncSink::Ready => break AsyncSink::Ready,
+                AsyncSink::NotReady(item) => item,
+            };
+            let wr = self.proto.poll_writing()?;
+            let rd = self.proto.poll_reading()?;
+            if !wr && !rd {
+                break AsyncSink::NotReady(item);
+            }
+        };
         let new_timeout = self.proto.get_timeout();
         let now = Instant::now();
         if new_timeout < now {
@@ -258,80 +343,10 @@ impl<S: AsyncRead + AsyncWrite, C: Codec<S>> Sink for PureProto<S, C> {
         return Ok(r);
     }
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.writing = match mem::replace(&mut self.writing, OutState::Void) {
-            OutState::Idle(mut io, time) => {
-                io.flush().map_err(ErrorEnum::Io)?;
-                if time.elapsed() > self.config.keep_alive_timeout &&
-                    self.waiting.len() == 0 &&
-                    matches!(self.reading, InState::Idle(..))
-                {
-                    return Err(ErrorEnum::KeepAliveTimeout.into());
-                }
-                OutState::Idle(io, time)
-            }
-            // Note we break connection if serializer errored, because
-            // we don't actually know if connection can be reused
-            // safefully in this case
-            OutState::Write(mut fut, start) => match fut.poll()? {
-                Async::Ready(done) => {
-                    let mut io = get_inner(done);
-                    io.flush().map_err(ErrorEnum::Io)?;
-                    OutState::Idle(io, Instant::now())
-                }
-                Async::NotReady => OutState::Write(fut, start),
-            },
-            OutState::Void => unreachable!(),
-        };
         loop {
-            let (state, cont) =
-                match mem::replace(&mut self.reading, InState::Void) {
-                    InState::Idle(mut io, time) => {
-                        if let Some(w) = self.waiting.pop_front() {
-                            let Waiting { codec: nr, state, queued_at } = w;
-                            let parser = Parser::new(io, nr,
-                                state, self.close.clone());
-                            (InState::Read(parser, queued_at), true)
-                        } else {
-                            // This serves for two purposes:
-                            // 1. Detect connection has been closed (i.e.
-                            //    we need to call `poll_read()` every time)
-                            // 2. Detect premature bytes (we didn't sent
-                            //    a request yet, but there is a response)
-                            if io.read().map_err(ErrorEnum::Io)? != 0 {
-                                return Err(
-                                    ErrorEnum::PrematureResponseHeaders.into());
-                            }
-                            if io.done() {
-                                return Err(ErrorEnum::Closed.into());
-                            }
-                            (InState::Idle(io, time), false)
-                        }
-                    }
-                    InState::Read(mut parser, time) => {
-                        match parser.poll()? {
-                            Async::NotReady => {
-                                (InState::Read(parser, time), false)
-                            }
-                            Async::Ready(Some(io)) => {
-                                // after request is done, rearm keep-alive
-                                // timeout
-                                match self.writing {
-                                    OutState::Idle(_, ref mut time) => {
-                                        *time = Instant::now();
-                                    }
-                                    _ => {}
-                                }
-                                (InState::Idle(io, Instant::now()), true)
-                            }
-                            Async::Ready(None) => {
-                                return Err(ErrorEnum::Closed.into());
-                            }
-                        }
-                    }
-                    InState::Void => unreachable!(),
-                };
-            self.reading = state;
-            if !cont {
+            let wr = self.poll_writing()?;
+            let rd = self.poll_reading()?;
+            if !wr && !rd {
                 break;
             }
         }
