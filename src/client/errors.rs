@@ -119,6 +119,24 @@ impl Error {
     {
         Error(ErrorEnum::Custom(err.into()))
     }
+
+    /// Tries to catch all the conditions where this isn't error
+    ///
+    /// Currently catches these conditions:
+    ///
+    /// 1. Connection timed out while being on keep-alive (no inprogress
+    ///    requests)
+    /// 2. Connection is closed after `Connection: close` header
+    ///
+    /// More conditions may be added in future. This should be commonly used
+    /// to skip logging of useless errors.
+    pub fn is_graceful(&self) -> bool {
+        match self.0 {
+            ErrorEnum::Closed => true,
+            ErrorEnum::KeepAliveTimeout => true,
+            _ => false,
+        }
+    }
 }
 
 #[test]
