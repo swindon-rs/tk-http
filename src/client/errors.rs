@@ -96,7 +96,7 @@ quick_error! {
         }
         /// Connection timed out on keep alive
         KeepAliveTimeout {
-            description("connection timed out beeing on keep-alive")
+            description("connection timed out being on keep-alive")
         }
         Custom(err: Box<::std::error::Error + Send + Sync>) {
             description("custom error")
