@@ -1,5 +1,6 @@
 use std::io;
 use std::fmt::Display;
+#[allow(unused_imports)]
 use std::ascii::AsciiExt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};

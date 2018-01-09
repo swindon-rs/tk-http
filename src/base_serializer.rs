@@ -3,6 +3,7 @@
 
 use std::fmt::Display;
 use std::io::Write;
+#[allow(unused_imports)]
 use std::ascii::AsciiExt;
 
 use tk_bufstream::Buf;

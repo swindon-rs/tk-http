@@ -6,6 +6,7 @@ extern crate tokio_core;
 extern crate url;
 extern crate rustls;
 extern crate tokio_rustls;
+extern crate webpki;
 
 #[macro_use] extern crate log;
 
@@ -21,6 +22,7 @@ use tokio_core::net::TcpStream;
 use tokio_rustls::ClientConfigExt;
 use tk_http::client::buffered::{Buffered};
 use tk_http::client::{Proto, Config, Error};
+use webpki::DNSNameRef;
 
 
 pub fn main() {
@@ -45,6 +47,7 @@ pub fn main() {
         cfg.root_store.add_pem_file(&mut pem).unwrap();
         cfg
     });
+    let host = DNSNameRef::try_from_ascii_str(host).expect("host is valid");
     let response = lp.run(futures::lazy(move || {
         TcpStream::connect(&addr, &handle)
         .and_then(move |sock| config.connect_async(host, sock))

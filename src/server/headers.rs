@@ -1,5 +1,6 @@
 use std::str::from_utf8;
 use std::slice::Iter as SliceIter;
+#[allow(unused_imports)]
 use std::ascii::AsciiExt;
 use std::borrow::Cow;
 

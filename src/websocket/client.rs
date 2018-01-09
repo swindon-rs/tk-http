@@ -1,5 +1,6 @@
 //! Websocket client implementation
 //!
+#[allow(unused_imports)]
 use std::ascii::AsciiExt;
 use std::fmt::Display;
 

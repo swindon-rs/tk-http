@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::borrow::Cow;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::str::from_utf8;
+#[allow(unused_imports)]
 use std::ascii::AsciiExt;
 
 use futures::{Future, Async, Poll};

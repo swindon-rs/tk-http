@@ -70,12 +70,13 @@ fn main() {
                             e.status(Status::Ok);
                             e.add_length(file.size()).unwrap();
                             if e.done_headers().unwrap() {
-                                e.raw_body()
+                                Box::new(e.raw_body()
                                 .and_then(|raw_body| file.write_into(raw_body))
-                                .map(|raw_body| raw_body.done())
-                                .boxed()
+                                .map(|raw_body| raw_body.done()))
+                                as Box<Future<Item=_, Error=_>>
                             } else {
-                                ok(e.done()).boxed()
+                                Box::new(ok(e.done()))
+                                as Box<Future<Item=_, Error=_>>
                             }
                         })
                         .map_err(|_| -> Error { unimplemented!(); })

@@ -62,7 +62,7 @@ pub fn main() {
                 .map_err(|_| unreachable!())
                 .and_then(move |_| {
                     println!("Sending 'hello'");
-                    tx2.send(Text("hello".to_string()))
+                    tx2.unbounded_send(Text("hello".to_string()))
                     .map_err(|_| ())
                 })
                 .then(|_| Ok(())));
