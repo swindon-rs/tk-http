@@ -23,6 +23,7 @@ extern crate byteorder;
 #[macro_use(quick_error)] extern crate quick_error;
 #[macro_use] extern crate matches;
 #[macro_use] extern crate log;
+#[cfg(feature="date_header")]extern crate httpdate;
 
 pub mod server;
 pub mod client;

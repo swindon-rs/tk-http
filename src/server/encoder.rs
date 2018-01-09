@@ -172,6 +172,20 @@ impl<S> Encoder<S> {
     {
         self.state.add_chunked(&mut self.io.out_buf)
     }
+
+    /// Add a date header with the current date
+    ///
+    /// This is barely a shortcut for:
+    /// ```
+    /// enc.format_header("Date", HttpDate::from(SystemTime::now()));
+    /// ```
+    #[cfg(feature="date_header")]
+    pub fn add_date(&mut self) {
+        use httpdate::HttpDate;
+        use std::time::SystemTime;
+        self.format_header("Date", HttpDate::from(SystemTime::now()))
+            .expect("always valid to add a date")
+    }
     /// Returns true if at least `status()` method has been called
     ///
     /// This is mostly useful to find out whether we can build an error page
@@ -399,5 +413,42 @@ mod sendfile {
         fn poll_write(&self) -> Async<()> {
             self.io.get_ref().poll_write()
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use tk_bufstream::{MockData, IoBuf};
+    use {Status};
+
+    use base_serializer::{MessageState, Body};
+    use super::{Encoder, EncoderDone};
+    use enums::Version;
+
+    fn do_response11_str<F>(fun: F) -> String
+        where F: FnOnce(Encoder<MockData>) -> EncoderDone<MockData>
+    {
+        let mock = MockData::new();
+        let done = fun(Encoder {
+                state: MessageState::ResponseStart {
+                    body: Body::Normal,
+                    version: Version::Http11,
+                    close: false,
+                },
+                io: IoBuf::new(mock.clone()).split().0,
+            });
+        {done}.buf.flush().unwrap();
+        String::from_utf8_lossy(&mock.output(..)).to_string()
+    }
+
+    #[test]
+    fn date_header() {
+        assert!(do_response11_str(|mut enc| {
+                enc.status(Status::Ok);
+                enc.add_date();
+                enc.add_length(0).unwrap();
+                enc.done_headers().unwrap();
+                enc.done()
+            }).starts_with("HTTP/1.1 200 OK\r\nDate: "));
     }
 }
