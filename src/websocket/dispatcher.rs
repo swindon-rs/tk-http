@@ -96,7 +96,8 @@ impl<S, T, D, E> Loop<S, T, D>
             last_message_received: Instant::now(),
             // Note: we expect that loop is polled immediately, so timeout
             // is polled too
-            ping_timeout: Timeout::new(config.ping_interval, handle)
+            ping_timeout: Timeout::new(
+                min(config.ping_interval, config.inactivity_timeout), handle)
                 .expect("Can always set timeout"),
         }
     }
@@ -316,24 +317,24 @@ impl<S, T, D, E> Future for Loop<S, T, D>
         }
         if self.read_messages()? > 0 {
             self.last_message_received = Instant::now();
-            self.ping_timeout = Timeout::new_at(
-                self.last_message_received + self.config.ping_interval,
+            self.ping_timeout = Timeout::new_at(self.last_message_received +
+                min(self.config.ping_interval, self.config.inactivity_timeout),
                 &self.handle,
             ).expect("can always set timeout");
         }
         loop {
             match self.ping_timeout.poll().map_err(|_| ErrorEnum::Timeout)? {
                 Async::Ready(()) => {
-                    debug!("Sending ping");
-                    write_packet(&mut self.output.out_buf,
-                                 0x9, b"tk-http-ping", !self.server);
-                    self.output.flush().map_err(ErrorEnum::Io)?;
                     let deadline = Instant::now() -
                         self.config.inactivity_timeout;
                     if self.last_message_received < deadline {
                         self.state = LoopState::Done;
                         return Ok(Async::Ready(()));
                     } else {
+                        debug!("Sending ping");
+                        write_packet(&mut self.output.out_buf,
+                                     0x9, b"tk-http-ping", !self.server);
+                        self.output.flush().map_err(ErrorEnum::Io)?;
                         self.ping_timeout = Timeout::new_at(
                             min(self.last_message_received
                                 + self.config.inactivity_timeout,
