@@ -46,8 +46,9 @@ pub struct Loop<S, T, D: Dispatcher> {
     server: bool,
     handle: Handle,
     last_message_received: Instant,
+    last_ping: Instant,
     last_byte: Instant,
-    ping_timeout: Timeout,
+    timeout: Timeout,
 }
 
 
@@ -95,11 +96,14 @@ impl<S, T, D, E> Loop<S, T, D>
             server: true,
             handle: handle.clone(),
             last_message_received: Instant::now(),
+            last_ping: Instant::now(),
             last_byte: Instant::now(),
             // Note: we expect that loop is polled immediately, so timeout
             // is polled too
-            ping_timeout: Timeout::new(
-                min(config.ping_interval, config.message_timeout), handle)
+            timeout: Timeout::new(
+                min(config.byte_timeout,
+                    min(config.ping_interval, config.message_timeout)),
+                handle)
                 .expect("Can always set timeout"),
         }
     }
@@ -123,10 +127,14 @@ impl<S, T, D, E> Loop<S, T, D>
             server: false,
             handle: handle.clone(),
             last_message_received: Instant::now(),
+            last_ping: Instant::now(),
             last_byte: Instant::now(),
             // Note: we expect that loop is polled immediately, so timeout
             // is polled too
-            ping_timeout: Timeout::new(config.ping_interval, handle)
+            timeout: Timeout::new(
+                min(config.byte_timeout,
+                    min(config.ping_interval, config.message_timeout)),
+                handle)
                 .expect("Can always set timeout"),
         }
     }
@@ -170,10 +178,14 @@ impl<S> Loop<S, stream::Empty<Packet, VoidError>, BlackHole>
             server: true,
             handle: handle.clone(),
             last_message_received: Instant::now(),
+            last_ping: Instant::now(),
             last_byte: Instant::now(),
             // Note: we expect that loop is polled immediately, so timeout
             // is polled too
-            ping_timeout: Timeout::new(config.message_timeout, handle)
+            timeout: Timeout::new(
+                min(config.byte_timeout,
+                    min(config.ping_interval, config.message_timeout)),
+                handle)
                 .expect("Can always set timeout"),
         }
     }
@@ -328,16 +340,16 @@ impl<S, T, D, E> Future for Loop<S, T, D>
         }
         if self.read_messages()? > 0 {
             self.last_message_received = Instant::now();
-            self.ping_timeout = Timeout::new_at(
+            self.timeout = Timeout::new_at(
                 min(self.last_message_received +
-                    min(self.config.ping_interval,
-                        self.config.message_timeout),
-                    self.last_byte + self.config.byte_timeout),
+                        self.config.message_timeout,
+                min(self.last_ping + self.config.ping_interval,
+                    self.last_byte + self.config.byte_timeout)),
                 &self.handle,
             ).expect("can always set timeout");
         }
         loop {
-            match self.ping_timeout.poll().map_err(|_| ErrorEnum::Timeout)? {
+            match self.timeout.poll().map_err(|_| ErrorEnum::Timeout)? {
                 Async::Ready(()) => {
                     let deadline = min(
                         self.last_message_received +
@@ -346,7 +358,9 @@ impl<S, T, D, E> Future for Loop<S, T, D>
                     if Instant::now() > deadline {
                         self.state = LoopState::Done;
                         return Ok(Async::Ready(()));
-                    } else {
+                    } else if Instant::now() >
+                        self.last_ping + self.config.ping_interval
+                    {
                         debug!("Sending ping");
                         let old_val = self.output.out_buf.len();
                         write_packet(&mut self.output.out_buf,
@@ -356,20 +370,21 @@ impl<S, T, D, E> Future for Loop<S, T, D>
                         if old_val > 0 && self.output.out_buf.len() < old_val {
                             self.last_byte = Instant::now();
                         }
+                        self.last_ping = Instant::now();
+                    }
 
-                        self.ping_timeout = Timeout::new_at(
-                            min(self.last_message_received +
-                                min(self.config.ping_interval,
-                                    self.config.message_timeout),
-                                self.last_byte + self.config.byte_timeout),
-                            &self.handle)
-                            .expect("can always set timeout");
-                        match self.ping_timeout.poll()
-                              .map_err(|_| ErrorEnum::Timeout)?
-                        {
-                            Async::NotReady => break,
-                            Async::Ready(()) => continue,
-                        }
+                    self.timeout = Timeout::new_at(
+                        min(self.last_message_received +
+                                self.config.message_timeout,
+                        min(self.last_ping + self.config.ping_interval,
+                            self.last_byte + self.config.byte_timeout)),
+                        &self.handle)
+                        .expect("can always set timeout");
+                    match self.timeout.poll()
+                          .map_err(|_| ErrorEnum::Timeout)?
+                    {
+                        Async::NotReady => break,
+                        Async::Ready(()) => continue,
                     }
                 }
                 Async::NotReady => break,
