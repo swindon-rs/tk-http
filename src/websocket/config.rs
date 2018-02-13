@@ -8,7 +8,8 @@ impl Config {
     pub fn new() -> Config {
         Config {
             ping_interval: Duration::new(10, 0),
-            inactivity_timeout: Duration::new(30, 0),
+            message_timeout: Duration::new(30, 0),
+            byte_timeout: Duration::new(30, 0),
             max_packet_size: 10 << 20,
         }
     }
@@ -53,8 +54,36 @@ impl Config {
     ///
     /// Note: you may also need to tune ping interval if you change
     /// this value.
+    pub fn message_timeout(&mut self, dur: Duration) -> &mut Self {
+        self.message_timeout = dur;
+        self
+    }
+
+    /// Sets both message timeout and byte timeout to the same value
     pub fn inactivity_timeout(&mut self, dur: Duration) -> &mut Self {
-        self.inactivity_timeout = dur;
+        self.message_timeout = dur;
+        self.byte_timeout = dur;
+        self
+    }
+
+    /// Similar to message timeout but works at byte level
+    ///
+    /// Being less strict timeout this value is two-way: any byte sent or
+    /// received resets the timer (Also, we do our best to ignore outgoing
+    /// pings)
+    ///
+    /// There are two points to consider for tweaking timeout:
+    ///
+    /// 1. To prevent resource exhaustion by a peer: sending a byte at a time,
+    ///    you might make it higher, up to message timeout
+    /// 2. To be able to receive larger messages (say 1Mb or 10 Mb) you can
+    ///    make message timeout much larger for largest message to fit, but
+    ///    make byte timeout smaller so that if nothing it being received you
+    ///    can close connection earlier.
+    ///
+    /// Note: there is no sense to make this value larger than message_timeout
+    pub fn byte_timeout(&mut self, dur: Duration) -> &mut Self {
+        self.byte_timeout = dur;
         self
     }
 

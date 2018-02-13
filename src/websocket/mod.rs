@@ -26,6 +26,7 @@ pub use self::zero_copy::Frame;
 #[derive(Debug, Clone)]
 pub struct Config {
     ping_interval: Duration,
-    inactivity_timeout: Duration,
+    message_timeout: Duration,
+    byte_timeout: Duration,
     max_packet_size: usize,
 }
