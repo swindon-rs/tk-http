@@ -176,7 +176,8 @@ impl<S> Encoder<S> {
     /// Add a date header with the current date
     ///
     /// This is barely a shortcut for:
-    /// ```
+    ///
+    /// ```ignore
     /// enc.format_header("Date", HttpDate::from(SystemTime::now()));
     /// ```
     #[cfg(feature="date_header")]
