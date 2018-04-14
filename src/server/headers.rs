@@ -25,6 +25,7 @@ const MAX_HEADERS: usize = 1024;
 
 struct RequestConfig<'a> {
     body: BodyKind,
+    #[allow(dead_code)] // TODO(tailhook) implement Expect support
     expect_continue: bool,
     connection_close: bool,
     connection: Option<Cow<'a, str>>,
