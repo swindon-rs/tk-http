@@ -313,7 +313,7 @@ impl<S> io::Write for Encoder<S> {
         // TODO(tailhook) we might want to propatage error correctly
         // rather than panic
         self.write_body(buf);
-        Ok((buf.len()))
+        Ok(buf.len())
     }
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
